@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect, FormEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import remarkCjkFriendly from 'remark-cjk-friendly'
+import rehypeKatex from 'rehype-katex'
 
 type Message = {
   role: 'user' | 'assistant'
@@ -137,7 +139,10 @@ export default function Home() {
                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
                 </span>
               ) : msg.role === 'assistant' ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
+                  rehypePlugins={[rehypeKatex]}
+                >
                   {msg.content}
                 </ReactMarkdown>
               ) : (
