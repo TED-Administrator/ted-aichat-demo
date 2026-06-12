@@ -127,11 +127,12 @@ export default function Home() {
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-zinc-900">
       <header className="flex-none bg-white dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700 px-4 py-3 flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-base font-semibold text-gray-800 dark:text-zinc-100">
             AI チャット
           </h1>
-          <p className="text-xs text-gray-400 dark:text-zinc-400 mt-0.5">
+          <span className="text-gray-300 dark:text-zinc-600 select-none">|</span>
+          <p className="text-xs text-gray-400 dark:text-zinc-500">
             Powered by llama.cpp + Gemma
           </p>
         </div>
@@ -259,6 +260,11 @@ export default function Home() {
           }}
         />
       </div>
+
+      <footer className="flex-none bg-white dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700 px-4 py-2 flex items-center justify-between text-xs text-gray-400 dark:text-zinc-500">
+        <span>© 2026 TED</span>
+        <span>AI の回答は参考情報です。重要な意思決定には専門家へご確認ください。</span>
+      </footer>
     </div>
   )
 }
