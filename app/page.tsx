@@ -8,10 +8,23 @@ import remarkCjkFriendly from 'remark-cjk-friendly'
 import rehypeKatex from 'rehype-katex'
 import HandsonPanel from './components/HandsonPanel'
 
+type Token = { id: number; piece: string }
+
 type Message = {
   role: 'user' | 'assistant'
   content: string
+  tokens?: Token[]
+  showTokens?: boolean
 }
+
+const TOKEN_COLORS = [
+  'bg-rose-100 dark:bg-rose-900/40',
+  'bg-amber-100 dark:bg-amber-900/40',
+  'bg-lime-100 dark:bg-lime-900/40',
+  'bg-sky-100 dark:bg-sky-900/40',
+  'bg-violet-100 dark:bg-violet-900/40',
+  'bg-orange-100 dark:bg-orange-900/40',
+]
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -38,6 +51,28 @@ export default function Home() {
       localStorage.setItem('handson-panel-open', String(!prev))
       return !prev
     })
+  }
+
+  async function handleTokenToggle(index: number, content: string, hasTokens: boolean) {
+    if (hasTokens) {
+      setMessages(prev => prev.map((m, j) =>
+        j === index ? { ...m, showTokens: !m.showTokens } : m
+      ))
+      return
+    }
+    try {
+      const res = await fetch('/api/tokenize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      const data = await res.json()
+      if (data.tokens) {
+        setMessages(prev => prev.map((m, j) =>
+          j === index ? { ...m, tokens: data.tokens, showTokens: true } : m
+        ))
+      }
+    } catch { /* ignore */ }
   }
 
   function handleClearChat() {
@@ -189,12 +224,54 @@ export default function Home() {
                       <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
                     </span>
                   ) : msg.role === 'assistant' ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
-                      rehypePlugins={[rehypeKatex]}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
+                    <>
+                      {msg.showTokens && msg.tokens ? (
+                        <div className="not-prose">
+                          <p className="text-sm leading-loose font-mono break-all">
+                            {msg.tokens.map((t, ti) => (
+                              <span
+                                key={ti}
+                                className={`${TOKEN_COLORS[ti % TOKEN_COLORS.length]} rounded px-0.5 cursor-default`}
+                                title={`ID: ${t.id}`}
+                              >
+                                {t.piece}
+                              </span>
+                            ))}
+                          </p>
+                        </div>
+                      ) : (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      )}
+                      {!(loading && i === messages.length - 1) && (
+                        <div className="not-prose flex justify-end mt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleTokenToggle(i, msg.content, !!msg.tokens)}
+                            title={msg.showTokens ? 'マークダウン表示に戻す' : 'トークン単位で表示'}
+                            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors ${
+                              msg.showTokens
+                                ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400'
+                                : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'
+                            }`}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="4" y1="9" x2="20" y2="9" />
+                              <line x1="4" y1="15" x2="20" y2="15" />
+                              <line x1="10" y1="3" x2="8" y2="21" />
+                              <line x1="16" y1="3" x2="14" y2="21" />
+                            </svg>
+                            {msg.showTokens
+                              ? `${msg.tokens!.length} tokens`
+                              : 'トークン'}
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     msg.content
                   )}
@@ -244,9 +321,14 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="flex-none rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                aria-label="送信"
+                title="送信"
+                className="flex-none w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                送信
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
               </button>
             </div>
           </form>

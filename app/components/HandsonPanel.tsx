@@ -72,9 +72,14 @@ export default function HandsonPanel({ isOpen, onUsePrompt }: Props) {
                       <button
                         type="button"
                         onClick={() => onUsePrompt(text)}
-                        className="absolute top-2 right-2 rounded px-2 py-1 text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-600 transition-colors"
+                        aria-label="入力"
+                        title="入力"
+                        className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded bg-indigo-500 text-white hover:bg-indigo-600 transition-colors"
                       >
-                        入力
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
                       </button>
                     </div>
                   )
