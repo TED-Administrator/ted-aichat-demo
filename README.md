@@ -148,6 +148,63 @@ function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
 
 `e.nativeEvent.isComposing` が `true` の間（IME 変換中）は Enter を無視し、変換確定後の Enter のみ送信を実行します。
 
+## LLM パフォーマンス記録
+
+### 検証環境
+
+| 項目 | 内容 |
+|------|------|
+| ハードウェア | Mac Studio / Apple M4 Max / 36GB |
+| LLM サーバー | llama.cpp |
+| モデル | Google Gemma 4 12B IT |
+| 計測日 | 2026-06-12 |
+
+### 量子化別ベンチマーク
+
+| 量子化 | ファイルサイズ | プリフィル速度 | 生成速度 | 備考 |
+|--------|-------------|-------------|---------|------|
+| Q8_0  | 12 GB | 78 t/s | 28 t/s | **採用** M4 Max では最速 |
+| Q4_K_M | 7.1 GB | 63 t/s | 36 t/s | Q4 でも Q8 より遅い（Metal GPU との相性） |
+
+> **M4 Max では Q4_K_M より Q8_0 の方が速い。**  
+> Metal GPU は Q8_0 の演算を効率よく処理するため、量子化による帯域削減よりも dequantization のオーバーヘッドが大きくなる。
+
+### チューニング結果
+
+| オプション | 効果 |
+|-----------|------|
+| `--flash-attn on` | 生成速度が低下。Metal 実装では decode フェーズに逆効果 |
+| `--parallel 1` | スロット削減によるメモリ節約。速度への影響は軽微 |
+| `--ubatch-size 2048` | 長い会話の prefill 改善を期待したが効果なし |
+| `--cache-type-k/v q8_0` | 生成速度がさらに低下 |
+
+### 現在の llama-server 起動設定
+
+```xml
+llama-server
+  -m  /Users/matsumura/Models/llama.cpp/gemma-4-12b-it/gemma-4-12b-it-Q8_0.gguf
+  --mmproj /Users/matsumura/Models/llama.cpp/gemma-4-12b-it/mmproj-BF16.gguf
+  -ngl 999            # 全レイヤーを Metal GPU にオフロード
+  --host 127.0.0.1
+  --port 8080
+  --ctx-size 32768
+```
+
+launchd サービス: `~/Library/LaunchAgents/jp.co.occ.ted.llama-server.plist`
+
+### 速度改善の選択肢
+
+現在の 28 t/s は M4 Max + 12B Q8_0 の物理的な上限（メモリ帯域幅の 82% 使用）。  
+さらなる高速化には小さいモデルが有効：
+
+| モデル | 期待速度 | 品質 |
+|--------|---------|------|
+| Gemma 4 12B Q8_0（現状） | 28 t/s | 高 |
+| Gemma 4 4B | ~80-100 t/s | 中 |
+| Gemma 4 2B 以下 | ~150+ t/s | 低 |
+
+---
+
 ## ライセンス
 
 MIT
