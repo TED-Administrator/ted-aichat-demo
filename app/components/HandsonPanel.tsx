@@ -15,6 +15,7 @@ type Props = {
 const PAGES = [
   { id: 1, title: 'AIリテラシー', file: '/handson/handson.md' },
   { id: 2, title: 'AIの仕組み', file: '/handson/handson2.md' },
+  { id: 3, title: 'AIとセキュリティ', file: '/handson/handson3.md' },
 ]
 
 function extractText(node: React.ReactNode): string {
