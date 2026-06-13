@@ -13,6 +13,11 @@ type Token = { id: number; piece: string }
 type Message = {
   role: 'user' | 'assistant'
   content: string
+  thinkingEnabled?: boolean
+  rawThinking?: string
+  thinking?: string
+  thinkingDone?: boolean
+  showThinking?: boolean
   tokens?: Token[]
   showTokens?: boolean
 }
@@ -33,6 +38,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelMounted, setPanelMounted] = useState(false)
+  const [thinking, setThinking] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -43,12 +49,20 @@ export default function Home() {
 
   useEffect(() => {
     setPanelOpen(localStorage.getItem('handson-panel-open') === 'true')
+    setThinking(localStorage.getItem('thinking-mode') === 'true')
     setPanelMounted(true)
   }, [])
 
   function togglePanel() {
     setPanelOpen((prev) => {
       localStorage.setItem('handson-panel-open', String(!prev))
+      return !prev
+    })
+  }
+
+  function toggleThinking() {
+    setThinking((prev) => {
+      localStorage.setItem('thinking-mode', String(!prev))
       return !prev
     })
   }
@@ -92,7 +106,7 @@ export default function Home() {
     setError(null)
     const userMessage: Message = { role: 'user', content: text }
     const history = [...messages, userMessage]
-    setMessages([...history, { role: 'assistant', content: '' }])
+    setMessages([...history, { role: 'assistant', content: '', thinkingEnabled: thinking }])
     setInput('')
     setLoading(true)
 
@@ -101,7 +115,7 @@ export default function Home() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, thinking }),
         signal: abortControllerRef.current.signal,
       })
 
@@ -134,7 +148,33 @@ export default function Home() {
             if (chunk) {
               setMessages((prev) => {
                 const last = prev[prev.length - 1]
-                return [...prev.slice(0, -1), { ...last, content: last.content + chunk }]
+                if (!last.thinkingEnabled || last.thinkingDone) {
+                  return [...prev.slice(0, -1), { ...last, content: last.content + chunk }]
+                }
+                const rawAcc = (last.rawThinking ?? '') + chunk
+                const closeIdx = rawAcc.indexOf('</think>')
+                if (closeIdx !== -1) {
+                  const rawThinking = rawAcc.slice(0, closeIdx)
+                  const cleanThinking = rawThinking.replace(/^<think>\n?/, '')
+                  const afterThink = rawAcc.slice(closeIdx + 8).trimStart()
+                  return [...prev.slice(0, -1), {
+                    ...last,
+                    rawThinking: rawAcc,
+                    thinking: cleanThinking,
+                    thinkingDone: true,
+                    showThinking: true,
+                    content: afterThink,
+                  }]
+                } else {
+                  const cleanThinking = rawAcc.replace(/^<think>\n?/, '')
+                  return [...prev.slice(0, -1), {
+                    ...last,
+                    rawThinking: rawAcc,
+                    thinking: cleanThinking,
+                    thinkingDone: false,
+                    content: '',
+                  }]
+                }
               })
             }
           } catch {
@@ -142,6 +182,16 @@ export default function Home() {
           }
         }
       }
+
+      // 推論モードで </think> が来なかった場合のフォールバック
+      setMessages(prev => {
+        const last = prev[prev.length - 1]
+        if (last?.role === 'assistant' && last.thinkingEnabled && !last.thinkingDone && last.rawThinking) {
+          const content = last.rawThinking.replace(/^<think>\n?/, '')
+          return [...prev.slice(0, -1), { ...last, thinkingDone: true, content, thinking: undefined }]
+        }
+        return prev
+      })
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : 'エラーが発生しました')
@@ -216,71 +266,120 @@ export default function Home() {
                     AI
                   </div>
                 )}
-                <div
-                  className={`max-w-[90%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words ${
-                    msg.role === 'user'
-                      ? 'bg-indigo-500 text-white rounded-tr-sm whitespace-pre-wrap'
-                      : 'bg-white dark:bg-zinc-800 text-gray-800 dark:text-zinc-100 border border-gray-200 dark:border-zinc-700 rounded-tl-sm prose prose-sm dark:prose-invert max-w-none'
-                  }`}
-                >
-                  {msg.content === '' && msg.role === 'assistant' ? (
-                    <span className="flex gap-1 py-0.5">
-                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
-                    </span>
-                  ) : msg.role === 'assistant' ? (
-                    <>
-                      {msg.showTokens && msg.tokens ? (
-                        <div className="not-prose">
-                          <p className="text-sm leading-loose font-mono break-all">
-                            {msg.tokens.map((t, ti) => (
-                              <span
-                                key={ti}
-                                className={`${TOKEN_COLORS[ti % TOKEN_COLORS.length]} rounded px-0.5 cursor-default`}
-                                title={`ID: ${t.id}`}
-                              >
-                                {t.piece}
-                              </span>
-                            ))}
-                          </p>
-                        </div>
-                      ) : (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
-                          rehypePlugins={[rehypeKatex]}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
-                      )}
-                      {!(loading && i === messages.length - 1) && (
-                        <div className="not-prose flex justify-end mt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleTokenToggle(i, msg.content, !!msg.tokens)}
-                            title={msg.showTokens ? 'マークダウン表示に戻す' : 'トークン単位で表示'}
-                            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors ${
-                              msg.showTokens
-                                ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400'
-                                : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'
-                            }`}
+                <div className="max-w-[90%] sm:max-w-[75%] flex flex-col gap-1">
+                  {/* 思考プロセス表示 */}
+                  {msg.role === 'assistant' && (msg.thinking !== undefined || (msg.thinkingEnabled && !msg.thinkingDone && msg.content === '')) && (
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-800 overflow-hidden text-sm">
+                      <button
+                        type="button"
+                        onClick={() => setMessages(prev => prev.map((m, j) =>
+                          j === i ? { ...m, showThinking: !m.showThinking } : m
+                        ))}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/>
+                          <path d="M9 18h6"/>
+                          <path d="M10 22h4"/>
+                        </svg>
+                        {!msg.thinkingDone ? (
+                          <span className="animate-pulse">思考中...</span>
+                        ) : (
+                          <span>思考プロセス</span>
+                        )}
+                        {msg.thinkingDone && (
+                          <svg
+                            width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                            className={`ml-auto transition-transform ${msg.showThinking ? 'rotate-180' : ''}`}
                           >
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="4" y1="9" x2="20" y2="9" />
-                              <line x1="4" y1="15" x2="20" y2="15" />
-                              <line x1="10" y1="3" x2="8" y2="21" />
-                              <line x1="16" y1="3" x2="14" y2="21" />
-                            </svg>
-                            {msg.showTokens
-                              ? `${msg.tokens!.length} tokens`
-                              : 'トークン'}
-                          </button>
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        )}
+                      </button>
+                      {(msg.showThinking || !msg.thinkingDone) && msg.thinking && (
+                        <div className="px-3 py-2 text-xs text-amber-900 dark:text-amber-300 bg-amber-50/60 dark:bg-amber-900/10 border-t border-amber-200 dark:border-amber-800 max-h-48 overflow-y-auto prose prose-xs dark:prose-invert max-w-none [&_*]:text-amber-900 dark:[&_*]:text-amber-300 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_pre]:bg-amber-100 dark:[&_pre]:bg-amber-900/30">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkCjkFriendly]}
+                          >
+                            {msg.thinking}
+                          </ReactMarkdown>
+                          {!msg.thinkingDone && <span className="animate-pulse">▌</span>}
                         </div>
                       )}
-                    </>
-                  ) : (
-                    msg.content
+                    </div>
                   )}
+
+                  {/* メッセージ本体 */}
+                  <div
+                    className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words ${
+                      msg.role === 'user'
+                        ? 'bg-indigo-500 text-white rounded-tr-sm whitespace-pre-wrap'
+                        : 'bg-white dark:bg-zinc-800 text-gray-800 dark:text-zinc-100 border border-gray-200 dark:border-zinc-700 rounded-tl-sm prose prose-sm dark:prose-invert max-w-none'
+                    }`}
+                  >
+                    {msg.content === '' && msg.role === 'assistant' && (!msg.thinkingEnabled || msg.thinkingDone) ? (
+                      <span className="flex gap-1 py-0.5">
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                      </span>
+                    ) : msg.role === 'assistant' ? (
+                      <>
+                        {msg.content === '' && msg.thinkingEnabled && !msg.thinkingDone ? null : (
+                          <>
+                            {msg.showTokens && msg.tokens ? (
+                              <div className="not-prose">
+                                <p className="text-sm leading-loose font-mono break-all">
+                                  {msg.tokens.map((t, ti) => (
+                                    <span
+                                      key={ti}
+                                      className={`${TOKEN_COLORS[ti % TOKEN_COLORS.length]} rounded px-0.5 cursor-default`}
+                                      title={`ID: ${t.id}`}
+                                    >
+                                      {t.piece}
+                                    </span>
+                                  ))}
+                                </p>
+                              </div>
+                            ) : (
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
+                                rehypePlugins={[rehypeKatex]}
+                              >
+                                {msg.content}
+                              </ReactMarkdown>
+                            )}
+                            {!(loading && i === messages.length - 1) && msg.content && (
+                              <div className="not-prose flex justify-end mt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTokenToggle(i, msg.content, !!msg.tokens)}
+                                  title={msg.showTokens ? 'マークダウン表示に戻す' : 'トークン単位で表示'}
+                                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors ${
+                                    msg.showTokens
+                                      ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400'
+                                      : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'
+                                  }`}
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="4" y1="9" x2="20" y2="9" />
+                                    <line x1="4" y1="15" x2="20" y2="15" />
+                                    <line x1="10" y1="3" x2="8" y2="21" />
+                                    <line x1="16" y1="3" x2="14" y2="21" />
+                                  </svg>
+                                  {msg.showTokens
+                                    ? `${msg.tokens!.length} tokens`
+                                    : 'トークン'}
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -311,6 +410,24 @@ export default function Home() {
                   <path d="M10 11v6" />
                   <path d="M14 11v6" />
                   <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </button>
+              {/* 推論モードトグル */}
+              <button
+                type="button"
+                onClick={toggleThinking}
+                title={thinking ? '推論モード ON（クリックでOFF）' : '推論モード OFF（クリックでON）'}
+                aria-pressed={thinking}
+                className={`flex-none w-9 h-9 flex items-center justify-center rounded-xl border transition-colors ${
+                  thinking
+                    ? 'border-amber-400 bg-amber-50 text-amber-500 dark:border-amber-500 dark:bg-amber-900/30 dark:text-amber-400'
+                    : 'border-gray-200 dark:border-zinc-600 text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                }`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/>
+                  <path d="M9 18h6"/>
+                  <path d="M10 22h4"/>
                 </svg>
               </button>
               <textarea
