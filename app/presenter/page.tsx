@@ -5,47 +5,26 @@ import { QRCodeSVG } from 'qrcode.react'
 import Link from 'next/link'
 
 export default function PresenterPage() {
-  const [browserUrl, setBrowserUrl] = useState('')
-  const [networkCandidates, setNetworkCandidates] = useState<string[]>([])
-  const [selectedUrl, setSelectedUrl] = useState('')
+  const [url, setUrl] = useState('')
   const [copied, setCopied] = useState(false)
+  const [model, setModel] = useState<string | null>(null)
+  const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1')
 
   useEffect(() => {
-    const origin = window.location.origin
-    const port = window.location.port || '3000'
-    setBrowserUrl(origin)
+    setUrl(window.location.origin)
 
-    fetch('/api/network-info')
+    fetch('/api/model-info')
       .then((r) => r.json())
-      .then(({ candidates }: { candidates: string[] }) => {
-        const urls = candidates.map((ip) => `http://${ip}:${port}`)
-        setNetworkCandidates(urls)
-
-        // localhost以外のLAN IPを優先選択、なければブラウザURL
-        const preferred = urls.find((u) => !u.includes('localhost')) ?? origin
-        setSelectedUrl(preferred)
-      })
-      .catch(() => {
-        setSelectedUrl(origin)
-      })
+      .then(({ model }: { model: string | null }) => setModel(model))
+      .catch(() => setModel(null))
   }, [])
 
-  // LAN候補取得前の初期値
-  useEffect(() => {
-    if (!selectedUrl && browserUrl) setSelectedUrl(browserUrl)
-  }, [browserUrl, selectedUrl])
-
   async function copyUrl() {
-    if (!selectedUrl) return
-    await navigator.clipboard.writeText(selectedUrl)
+    if (!url) return
+    await navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
-
-  const allUrls = [
-    ...networkCandidates,
-    ...(browserUrl && !networkCandidates.includes(browserUrl) ? [browserUrl] : []),
-  ]
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 flex flex-col items-center justify-center px-6 py-10">
@@ -65,11 +44,22 @@ export default function PresenterPage() {
           <p className="text-sm text-gray-500 dark:text-zinc-400">受講者アクセス用 URL</p>
         </div>
 
+        {/* localhost警告 */}
+        {isLocalhost && (
+          <div className="w-full flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+            <svg className="flex-none mt-0.5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>現在 <code className="font-mono">localhost</code> でアクセスしています。受講者が接続するには、このPCのIPアドレス（例: <code className="font-mono">192.168.x.x:ポート番号</code>）でアクセスし直してください。</span>
+          </div>
+        )}
+
         {/* QRコード */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200 dark:border-zinc-700">
-          {selectedUrl ? (
+          {url ? (
             <QRCodeSVG
-              value={selectedUrl}
+              value={url}
               size={260}
               level="M"
               bgColor="#ffffff"
@@ -85,60 +75,47 @@ export default function PresenterPage() {
         {/* URL表示 + コピーボタン */}
         <div className="w-full flex items-center gap-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 shadow-sm">
           <span className="flex-1 text-base font-mono text-gray-800 dark:text-zinc-100 break-all leading-snug">
-            {selectedUrl || '取得中...'}
+            {url || '取得中...'}
           </span>
           <button
             type="button"
             onClick={copyUrl}
             title="URLをコピー"
-            className={`flex-none flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex-none flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
               copied
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                 : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50'
             }`}
           >
             {copied ? (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                コピー済
-              </>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
             ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                コピー
-              </>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
             )}
           </button>
         </div>
 
-        {/* アクセス候補一覧 */}
-        {allUrls.length > 1 && (
-          <div className="w-full">
-            <p className="text-xs text-gray-400 dark:text-zinc-500 mb-2 font-medium">アクセス候補</p>
-            <div className="flex flex-col gap-1.5">
-              {allUrls.map((url) => (
-                <button
-                  key={url}
-                  type="button"
-                  onClick={() => setSelectedUrl(url)}
-                  className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-left transition-colors ${
-                    selectedUrl === url
-                      ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300'
-                      : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-700'
-                  }`}
-                >
-                  <span className={`flex-none w-2 h-2 rounded-full ${selectedUrl === url ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-zinc-600'}`} />
-                  <span className="font-mono">{url}</span>
-                </button>
-              ))}
-            </div>
+        {/* モデル情報 */}
+        <div className="w-full flex items-center gap-3 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 shadow-sm">
+          <svg className="flex-none text-indigo-400 dark:text-indigo-500" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/>
+            <path d="M9 18h6"/>
+            <path d="M10 22h4"/>
+          </svg>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs text-gray-400 dark:text-zinc-500">使用モデル</span>
+            <span className="text-sm font-mono text-gray-700 dark:text-zinc-200 truncate">
+              {model === undefined || model === null
+                ? <span className="text-gray-300 dark:text-zinc-600 animate-pulse">取得中...</span>
+                : model || '不明'}
+            </span>
           </div>
-        )}
+        </div>
 
         {/* チャットに戻るリンク */}
         <Link
