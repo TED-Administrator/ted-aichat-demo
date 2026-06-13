@@ -45,23 +45,35 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose }: Props) {
       .catch(() => setFetchError((prev) => ({ ...prev, [currentPage]: true })))
   }, [isOpen, currentPage, contents])
 
-  if (!isOpen) return null
-
   const content = contents[currentPage]
   const hasError = fetchError[currentPage]
 
   return (
-    <aside className="flex-none h-1/2 flex flex-col bg-white dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700 md:h-auto md:w-[40%] md:min-w-80 md:max-w-2xl md:border-t-0 md:border-l">
-      <div className="flex-none px-5 pt-3 pb-0 border-b border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 z-10">
+    <aside
+      aria-hidden={!isOpen}
+      className={`
+        flex-none flex flex-col overflow-hidden
+        bg-white dark:bg-zinc-800
+        border-t-2 border-indigo-400 dark:border-indigo-600
+        md:border-t-0 md:border-l-2 md:border-indigo-300 dark:md:border-indigo-700
+        md:max-h-none md:h-auto md:w-[40%] md:min-w-0
+        transition-[max-height,max-width] duration-300 ease-in-out
+        ${isOpen
+          ? 'max-h-[50vh] md:max-w-2xl'
+          : 'max-h-0 md:max-w-0'
+        }
+      `}
+    >
+      <div className="flex-none px-5 pt-3 pb-0 border-b border-indigo-700 dark:border-indigo-700 bg-indigo-600 dark:bg-indigo-800 z-10">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-200">
+          <h2 className="text-sm font-semibold text-white">
             ハンズオンテキスト
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="閉じる"
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/20 transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -77,8 +89,8 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose }: Props) {
               onClick={() => setCurrentPage(page.id)}
               className={`flex-none px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors ${
                 currentPage === page.id
-                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30'
-                  : 'border-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-700'
+                  ? 'border-white text-white bg-white/15'
+                  : 'border-transparent text-indigo-200 hover:text-white hover:bg-white/10'
               }`}
             >
               {page.title}
@@ -93,7 +105,7 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose }: Props) {
             テキストの読み込みに失敗しました。
           </p>
         )}
-        {!content && !hasError && (
+        {!content && !hasError && isOpen && (
           <p className="text-sm text-gray-400 dark:text-zinc-500 animate-pulse">読み込み中...</p>
         )}
         {content && (
