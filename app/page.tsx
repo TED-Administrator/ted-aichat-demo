@@ -172,8 +172,8 @@ export default function Home() {
           <h1 className="text-base font-semibold text-gray-800 dark:text-zinc-100">
             AI チャット
           </h1>
-          <span className="text-gray-300 dark:text-zinc-600 select-none">|</span>
-          <p className="text-xs text-gray-400 dark:text-zinc-500">
+          <span className="hidden sm:block text-gray-300 dark:text-zinc-600 select-none">|</span>
+          <p className="hidden sm:block text-xs text-gray-400 dark:text-zinc-500">
             Powered by llama.cpp + Gemma
           </p>
         </div>
@@ -196,8 +196,8 @@ export default function Home() {
         )}
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {messages.length === 0 && (
               <div className="flex items-center justify-center h-full">
@@ -217,7 +217,7 @@ export default function Home() {
                   </div>
                 )}
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words ${
+                  className={`max-w-[90%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words ${
                     msg.role === 'user'
                       ? 'bg-indigo-500 text-white rounded-tr-sm whitespace-pre-wrap'
                       : 'bg-white dark:bg-zinc-800 text-gray-800 dark:text-zinc-100 border border-gray-200 dark:border-zinc-700 rounded-tl-sm prose prose-sm dark:prose-invert max-w-none'
@@ -342,6 +342,7 @@ export default function Home() {
 
         <HandsonPanel
           isOpen={panelOpen}
+          onClose={togglePanel}
           onUsePrompt={(text) => {
             setInput(text)
             inputRef.current?.focus()
@@ -351,7 +352,7 @@ export default function Home() {
 
       <footer className="flex-none bg-white dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700 px-4 py-2 flex items-center justify-between text-xs text-gray-400 dark:text-zinc-500">
         <span>© 2026 TED</span>
-        <span>AI の回答は参考情報です。重要な意思決定には専門家へご確認ください。</span>
+        <span className="hidden sm:block">AI の回答は参考情報です。重要な意思決定には専門家へご確認ください。</span>
       </footer>
     </div>
   )
