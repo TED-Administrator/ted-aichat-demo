@@ -9,6 +9,7 @@ export default function PresenterPage() {
   const [copied, setCopied] = useState(false)
   const [model, setModel] = useState<string | null>(null)
   const [ctxSize, setCtxSize] = useState<number | null>(null)
+  const [parallel, setParallel] = useState<number | null>(null)
   const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1')
 
   useEffect(() => {
@@ -16,9 +17,10 @@ export default function PresenterPage() {
 
     fetch('/api/model-info')
       .then((r) => r.json())
-      .then(({ model, ctxSize }: { model: string | null; ctxSize: number | null }) => {
+      .then(({ model, ctxSize, parallel }: { model: string | null; ctxSize: number | null; parallel: number | null }) => {
         setModel(model)
         setCtxSize(ctxSize)
+        setParallel(parallel)
       })
       .catch(() => setModel(null))
   }, [])
@@ -118,9 +120,11 @@ export default function PresenterPage() {
                 ? <span className="text-gray-300 dark:text-zinc-600 animate-pulse">取得中...</span>
                 : model || '不明'}
             </span>
-            {ctxSize !== null && (
+            {(ctxSize !== null || parallel !== null) && (
               <span className="text-xs text-gray-400 dark:text-zinc-500 font-mono">
-                ctx-size: {ctxSize.toLocaleString()} tokens
+                {ctxSize !== null && `ctx-size: ${ctxSize.toLocaleString()} tokens`}
+                {ctxSize !== null && parallel !== null && '  /  '}
+                {parallel !== null && `parallel: ${parallel}`}
               </span>
             )}
           </div>
