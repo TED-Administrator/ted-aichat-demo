@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import rehypeKatex from 'rehype-katex'
+import Link from 'next/link'
 import HandsonPanel from './components/HandsonPanel'
 
 type Token = { id: number; piece: string }
@@ -227,23 +228,40 @@ export default function Home() {
             Powered by llama.cpp + Gemma
           </p>
         </div>
-        {panelMounted && (
-          <button
-            onClick={togglePanel}
-            title={panelOpen ? 'テキストを閉じる' : 'テキストを開く'}
-            aria-label={panelOpen ? 'テキストを閉じる' : 'テキストを開く'}
-            className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-colors ${
-              panelOpen
-                ? 'border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-400'
-                : 'border-gray-200 dark:border-zinc-600 text-gray-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
-            }`}
+        <div className="flex items-center gap-2">
+          {/* 受講者向けURL共有ページへのリンク */}
+          <Link
+            href="/presenter"
+            title="受講者向けURL共有"
+            aria-label="受講者向けURL共有"
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-600 text-gray-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <path d="M14 14h3v3h-3z" />
+              <path d="M17 17h3v3h-3z" />
             </svg>
-          </button>
-        )}
+          </Link>
+          {panelMounted && (
+            <button
+              onClick={togglePanel}
+              title={panelOpen ? 'テキストを閉じる' : 'テキストを開く'}
+              aria-label={panelOpen ? 'テキストを閉じる' : 'テキストを開く'}
+              className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-colors ${
+                panelOpen
+                  ? 'border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-900/30 dark:text-indigo-400'
+                  : 'border-gray-200 dark:border-zinc-600 text-gray-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
