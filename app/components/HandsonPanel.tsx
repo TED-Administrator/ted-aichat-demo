@@ -12,6 +12,11 @@ type Props = {
   onUsePrompt: (text: string) => void
 }
 
+const PAGES = [
+  { id: 1, title: 'AIリテラシー', file: '/handson/handson.md' },
+  { id: 2, title: 'AIの仕組み', file: '/handson/handson2.md' },
+]
+
 function extractText(node: React.ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(extractText).join('')
@@ -22,38 +27,58 @@ function extractText(node: React.ReactNode): string {
 }
 
 export default function HandsonPanel({ isOpen, onUsePrompt }: Props) {
-  const [content, setContent] = useState<string | null>(null)
-  const [fetchError, setFetchError] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [contents, setContents] = useState<Record<number, string>>({})
+  const [fetchError, setFetchError] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
-    if (!isOpen || content !== null) return
-    fetch('/handson/handson.md')
+    if (!isOpen || contents[currentPage] !== undefined) return
+    const page = PAGES.find((p) => p.id === currentPage)!
+    fetch(page.file)
       .then((r) => {
         if (!r.ok) throw new Error()
         return r.text()
       })
-      .then(setContent)
-      .catch(() => setFetchError(true))
-  }, [isOpen, content])
+      .then((text) => setContents((prev) => ({ ...prev, [currentPage]: text })))
+      .catch(() => setFetchError((prev) => ({ ...prev, [currentPage]: true })))
+  }, [isOpen, currentPage, contents])
 
   if (!isOpen) return null
 
+  const content = contents[currentPage]
+  const hasError = fetchError[currentPage]
+
   return (
     <aside className="w-[40%] min-w-80 max-w-2xl flex-none flex flex-col border-l border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-      <div className="flex-none px-5 py-3 border-b border-gray-200 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
-        <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-200">
+      <div className="flex-none px-5 pt-3 pb-0 border-b border-gray-200 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-zinc-200 mb-2">
           ハンズオンテキスト
         </h2>
+        <div className="flex gap-1">
+          {PAGES.map((page) => (
+            <button
+              key={page.id}
+              type="button"
+              onClick={() => setCurrentPage(page.id)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors ${
+                currentPage === page.id
+                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30'
+                  : 'border-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200 hover:bg-gray-50 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {page.title}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
-        {fetchError && (
+        {hasError && (
           <p className="text-sm text-red-500">
             テキストの読み込みに失敗しました。
-            <code className="ml-1 text-xs">public/handson/handson.md</code> が存在するか確認してください。
           </p>
         )}
-        {!content && !fetchError && (
+        {!content && !hasError && (
           <p className="text-sm text-gray-400 dark:text-zinc-500 animate-pulse">読み込み中...</p>
         )}
         {content && (
