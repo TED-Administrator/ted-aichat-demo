@@ -5,10 +5,11 @@ export async function GET() {
     const res = await fetch(`${LLAMA_URL}/v1/models`, { cache: 'no-store' })
     if (!res.ok) return Response.json({ model: null })
     const data = await res.json()
-    const id: string = data.data?.[0]?.id ?? null
-    // .gguf 拡張子を除いて返す
+    const entry = data.data?.[0]
+    const id: string = entry?.id ?? null
     const model = id ? id.replace(/\.gguf$/i, '') : null
-    return Response.json({ model })
+    const ctxSize: number | null = entry?.meta?.n_ctx ?? null
+    return Response.json({ model, ctxSize })
   } catch {
     return Response.json({ model: null })
   }
