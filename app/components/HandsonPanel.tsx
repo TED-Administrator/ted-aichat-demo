@@ -17,6 +17,7 @@ const PAGES = [
   { id: 1, title: 'AIリテラシー', file: '/handson/handson.md' },
   { id: 2, title: 'AIの仕組み', file: '/handson/handson2.md' },
   { id: 3, title: 'AIとセキュリティ', file: '/handson/handson3.md' },
+  { id: 4, title: 'AI推論とエージェント', file: '/handson/handson4.md' },
 ]
 
 function extractText(node: React.ReactNode): string {
@@ -65,21 +66,10 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose }: Props) {
       `}
     >
       <div className="flex-none px-5 pt-3 pb-0 border-b border-indigo-700 dark:border-indigo-700 bg-indigo-600 dark:bg-indigo-800 z-10">
-        <div className="flex items-center justify-between mb-2">
+        <div className="hidden md:flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-white">
             ハンズオンテキスト
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="閉じる"
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/20 transition-colors"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
         </div>
         <div className="flex gap-1 overflow-x-auto pb-px">
           {PAGES.map((page) => (
