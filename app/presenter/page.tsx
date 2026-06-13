@@ -8,6 +8,7 @@ export default function PresenterPage() {
   const [url, setUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [model, setModel] = useState<string | null>(null)
+  const [ctxSize, setCtxSize] = useState<number | null>(null)
   const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1')
 
   useEffect(() => {
@@ -15,7 +16,10 @@ export default function PresenterPage() {
 
     fetch('/api/model-info')
       .then((r) => r.json())
-      .then(({ model }: { model: string | null }) => setModel(model))
+      .then(({ model, ctxSize }: { model: string | null; ctxSize: number | null }) => {
+        setModel(model)
+        setCtxSize(ctxSize)
+      })
       .catch(() => setModel(null))
   }, [])
 
@@ -107,13 +111,18 @@ export default function PresenterPage() {
             <path d="M9 18h6"/>
             <path d="M10 22h4"/>
           </svg>
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 gap-0.5">
             <span className="text-xs text-gray-400 dark:text-zinc-500">使用モデル</span>
             <span className="text-sm font-mono text-gray-700 dark:text-zinc-200 truncate">
-              {model === undefined || model === null
+              {model === null
                 ? <span className="text-gray-300 dark:text-zinc-600 animate-pulse">取得中...</span>
                 : model || '不明'}
             </span>
+            {ctxSize !== null && (
+              <span className="text-xs text-gray-400 dark:text-zinc-500 font-mono">
+                ctx-size: {ctxSize.toLocaleString()} tokens
+              </span>
+            )}
           </div>
         </div>
 
