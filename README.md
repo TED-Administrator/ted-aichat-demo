@@ -148,6 +148,46 @@ function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
 
 `e.nativeEvent.isComposing` が `true` の間（IME 変換中）は Enter を無視し、変換確定後の Enter のみ送信を実行します。
 
+## 同時接続と並列処理
+
+### llama.cpp の処理モデル
+
+llama.cpp はデフォルトで **1リクエストずつ順番に処理** します。複数のリクエストが同時に届いた場合、先のリクエストの生成が完了するまでキューで待機します。
+
+```
+# parallel=1（デフォルト）の場合
+受講者A → [生成中...........] → 完了
+受講者B →       [待機]         [生成中...........] → 完了
+受講者C →       [待機]               [待機]         [生成中...] → 完了
+```
+
+### `--parallel` オプション
+
+`--parallel N` を指定すると、KVキャッシュを N 分割して複数リクエストを同時処理できます。
+
+```
+# parallel=4 の場合
+受講者A → [KVキャッシュ 1/4]
+受講者B → [KVキャッシュ 1/4]  ← 同時処理
+受講者C → [KVキャッシュ 1/4]  ← 同時処理
+受講者D → [KVキャッシュ 1/4]  ← 同時処理
+```
+
+**トレードオフ：** 並列数を増やすと1人あたりのKVキャッシュが減り、各ユーザーの生成速度（tokens/秒）が低下します。  
+現在は `--ctx-size 32768` ÷ `--parallel 4` = **1スロットあたり 8,192 tokens** で運用しています。
+
+### 研修での目安（E4B Q4_K_M、parallel=4）
+
+| 同時送信人数 | 挙動 |
+|------------|------|
+| 1〜4人 | 同時処理。各自の生成速度はやや低下 |
+| 5〜8人 | 4人ずつバッチ処理。5人目以降は待機 |
+| 10人以上 | 後の人は数十秒〜数分待つ可能性あり |
+
+研修の進行上、受講者が全員まったく同時に送信することは稀なため、parallel=4 で十分対応できるケースがほとんどです。
+
+---
+
 ## LLM パフォーマンス記録
 
 ### 検証環境
@@ -156,14 +196,14 @@ function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
 |------|------|
 | ハードウェア | Mac Studio / Apple M4 Max / 36GB |
 | LLM サーバー | llama.cpp |
-| モデル | Google Gemma 4 12B IT |
+| モデル | Google Gemma 4 12B IT（ベンチマーク時） |
 | 計測日 | 2026-06-12 |
 
-### 量子化別ベンチマーク
+### 量子化別ベンチマーク（Gemma 4 12B）
 
 | 量子化 | ファイルサイズ | プリフィル速度 | 生成速度 | 備考 |
 |--------|-------------|-------------|---------|------|
-| Q8_0  | 12 GB | 78 t/s | 28 t/s | **採用** M4 Max では最速 |
+| Q8_0  | 12 GB | 78 t/s | 28 t/s | M4 Max では最速 |
 | Q4_K_M | 7.1 GB | 63 t/s | 36 t/s | Q4 でも Q8 より遅い（Metal GPU との相性） |
 
 > **M4 Max では Q4_K_M より Q8_0 の方が速い。**  
@@ -174,34 +214,31 @@ function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
 | オプション | 効果 |
 |-----------|------|
 | `--flash-attn on` | 生成速度が低下。Metal 実装では decode フェーズに逆効果 |
-| `--parallel 1` | スロット削減によるメモリ節約。速度への影響は軽微 |
 | `--ubatch-size 2048` | 長い会話の prefill 改善を期待したが効果なし |
 | `--cache-type-k/v q8_0` | 生成速度がさらに低下 |
 
 ### 現在の llama-server 起動設定
 
-```xml
+```
 llama-server
-  -m  /Users/matsumura/Models/llama.cpp/gemma-4-12b-it/gemma-4-12b-it-Q8_0.gguf
-  --mmproj /Users/matsumura/Models/llama.cpp/gemma-4-12b-it/mmproj-BF16.gguf
+  -m  /Users/matsumura/Models/llama.cpp/gemma-4-E4B-it/gemma-4-E4B-it-Q4_K_M.gguf
+  --mmproj /Users/matsumura/Models/llama.cpp/gemma-4-E4B-it/mmproj-gemma-4-E4B-it-Q8_0.gguf
   -ngl 999            # 全レイヤーを Metal GPU にオフロード
   --host 127.0.0.1
   --port 8080
-  --ctx-size 32768
+  --ctx-size 32768    # 全スロット合計のKVキャッシュ（parallel=4で1スロット8192tokens）
+  --parallel 4        # 同時処理スロット数
 ```
 
 launchd サービス: `~/Library/LaunchAgents/jp.co.occ.ted.llama-server.plist`
 
-### 速度改善の選択肢
+### モデル別の特性比較
 
-現在の 28 t/s は M4 Max + 12B Q8_0 の物理的な上限（メモリ帯域幅の 82% 使用）。  
-さらなる高速化には小さいモデルが有効：
-
-| モデル | 期待速度 | 品質 |
-|--------|---------|------|
-| Gemma 4 12B Q8_0（現状） | 28 t/s | 高 |
-| Gemma 4 4B | ~80-100 t/s | 中 |
-| Gemma 4 2B 以下 | ~150+ t/s | 低 |
+| モデル | メモリ使用量 | 生成速度目安 | 研修用途 |
+|--------|-----------|------------|--------|
+| Gemma 4 12B Q8_0 | ~15 GB | 28 t/s | 高品質・差が出にくい |
+| **Gemma 4 E4B Q4_K_M（現在）** | ~6 GB | ~60-80 t/s | **研修推奨**・推論ON/OFFの差が見えやすい |
+| Gemma 4 E2B | ~3 GB | ~120+ t/s | 速いが品質が低い |
 
 ---
 
