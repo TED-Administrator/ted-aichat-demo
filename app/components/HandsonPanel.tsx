@@ -11,13 +11,17 @@ type Props = {
   isOpen: boolean
   onUsePrompt: (text: string) => void
   onClose: () => void
+  onWebSearchChange?: (enabled: boolean) => void
 }
 
-const PAGES = [
+type Page = { id: number; title: string; file: string; webSearch?: boolean }
+
+const PAGES: Page[] = [
   { id: 1, title: 'AIリテラシー', file: '/handson/handson.md' },
   { id: 2, title: 'AIの仕組み', file: '/handson/handson2.md' },
   { id: 3, title: 'AIとセキュリティ', file: '/handson/handson3.md' },
   { id: 4, title: 'AI推論とエージェント', file: '/handson/handson4.md' },
+  { id: 5, title: 'AIとWeb検索', file: '/handson/handson5.md', webSearch: true },
 ]
 
 function extractText(node: React.ReactNode): string {
@@ -29,7 +33,7 @@ function extractText(node: React.ReactNode): string {
   return ''
 }
 
-export default function HandsonPanel({ isOpen, onUsePrompt, onClose }: Props) {
+export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearchChange }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [contents, setContents] = useState<Record<number, string>>({})
   const [fetchError, setFetchError] = useState<Record<number, boolean>>({})
@@ -57,10 +61,10 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose }: Props) {
         bg-white dark:bg-zinc-800
         border-t-2 border-indigo-400 dark:border-indigo-600
         md:border-t-0 md:border-l-2 md:border-indigo-300 dark:md:border-indigo-700
-        md:max-h-none md:h-auto md:w-[40%] md:min-w-0
+        md:max-h-none md:h-auto md:w-1/2 md:min-w-0
         transition-[max-height,max-width] duration-300 ease-in-out
         ${isOpen
-          ? 'max-h-[50vh] md:max-w-2xl'
+          ? 'max-h-[50vh] md:max-w-[50%]'
           : 'max-h-0 md:max-w-0'
         }
       `}
@@ -76,7 +80,10 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose }: Props) {
             <button
               key={page.id}
               type="button"
-              onClick={() => setCurrentPage(page.id)}
+              onClick={() => {
+                setCurrentPage(page.id)
+                onWebSearchChange?.(page.webSearch === true)
+              }}
               className={`flex-none px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors ${
                 currentPage === page.id
                   ? 'border-white text-white bg-white/15'
