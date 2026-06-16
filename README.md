@@ -72,16 +72,82 @@ Next.js API Route（app/api/chat/route.ts）
   ▼
 llama.cpp サーバー（localhost:8080）
   │  SSE ストリーム
-  └─► API Route がそのままブラウザにプロキシ
+  └─► API Route がそのままブラウザにプロキシ（推論モード時）
 ```
 
 AI の回答はトークンが生成されるたびにリアルタイムでブラウザに送信されます（Server-Sent Events）。
+
+**通常モード（推論OFF）では tool calling のエージェントループが動きます：**
+
+```
+ブラウザ ──POST /api/chat──► API Route
+                              │  ① tools 付きで llama.cpp に問い合わせ（stream）
+                              │  ② 応答に tool_calls があれば…
+                              │     ├─ web_search → curl で DuckDuckGo 検索（失敗時 Wikipedia API）
+                              │     └─ open_url   → curl でページ取得＋本文抽出
+                              │  ③ ツール結果を履歴に足して再度 llama.cpp（②へループ）
+                              │  ④ tool_calls が無くなったら最終回答をストリーム
+                              ▼
+              ツール実行の進捗（🔍検索中 / 📄取得中）も SSE でブラウザに表示
+```
+
+ツール定義は `lib/tools.ts`、実行ロジックは `lib/execute-tool.ts` にあります。
 
 ## 使い方
 
 - **送信**：メッセージを入力して `Enter`
 - **改行**：`Shift + Enter`
 - 日本語 IME での変換確定（`Enter`）は送信に誤動作しません
+
+---
+
+## tool calling（Web検索）
+
+Web検索（tool calling）は、ハンズオンテキスト**5ページ目「AIとWeb検索」を開いているときだけ**有効になります。研修の段階づけのため、1〜4ページ目では従来どおりツールなしで応答します（クライアントが現在のページに応じて `webSearch` フラグを送り、API Route がループの有無を切り替えます）。Web検索が有効なときは、AI が必要に応じてインターネットを調べてから回答します。
+
+### 2つのツール
+
+| ツール | 役割 | 実装 |
+|--------|------|------|
+| `web_search` | キーワードで検索し、結果一覧（タイトル・URL・説明）を返す | `curl` で DuckDuckGo を検索。弾かれた場合は **Wikipedia 検索API** にフォールバック |
+| `open_url` | 指定URLを開いて本文テキストを抽出して返す | `curl` でページ取得 → 簡易HTML→テキスト変換 |
+
+人間の「①キーワード検索 → ②結果を選ぶ → ③ページを開いて読む」という流れを、そのまま2つのツールにマッピングしています。MCP サーバーや API キーは不要です。
+
+### なぜ `fetch` ではなく `curl` か
+
+Node.js の `fetch`（undici）は DuckDuckGo の anti-bot に弾かれ（HTTP 202）ますが、`curl` は通常どおり結果を取得できます。そのため検索・取得は `child_process` 経由で `curl` を実行しています。**`curl` が PATH に必要です**（macOS / Linux には標準搭載）。
+
+### 安全策（SSRF対策など）
+
+- `http` / `https` 以外のスキームは拒否
+- ホスト名をDNS解決し、ループバック・プライベート・リンクローカル（`127.0.0.0/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16`（クラウドメタデータ含む）, `::1`, `fc00::/7`, `fe80::/10`）への接続を拒否
+- リダイレクトは自動追従せず、各ホップで再度ガード（最大3）
+- タイムアウト・最大取得サイズ（512KB）・取得テキストの最大文字数で上限を設定
+
+### 環境変数（任意）
+
+| 変数名 | デフォルト | 説明 |
+|--------|-----------|------|
+| `TOOL_FETCH_TIMEOUT_MS` | `8000` | 検索・取得のタイムアウト（ミリ秒） |
+| `TOOL_MAX_TEXT_CHARS` | `4000` | 1ページから取り込む最大文字数 |
+| `TOOL_MAX_ITERATIONS` | `5` | エージェントループの最大反復回数 |
+
+### llama.cpp 側の要件
+
+OpenAI 互換の tool calling には llama-server の `--jinja`（チャットテンプレート有効化）が必要ですが、**近年の llama.cpp ビルドでは既定で有効**のため、追加設定なしで動作します。tool_calls が返らない場合は、起動引数に `--jinja` を明示するか、よりツール対応の安定したモデル（Gemma 4 12B など）への切り替えを検討してください。動作確認：
+
+```bash
+curl -s http://localhost:8080/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "messages":[{"role":"user","content":"明日の東京の天気を調べて"}],
+  "tools":[{"type":"function","function":{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}}}],
+  "tool_choice":"auto","stream":false
+}' | jq '.choices[0].message.tool_calls'
+```
+
+`tool_calls` が返れば OK です。
+
+> 注: tool calling と推論（`<think>`）を小型モデルで同時に行うと不安定なため、Web検索が有効なページでは推論モードより検索を優先します（推論は自動的にOFF扱い）。
 
 ---
 

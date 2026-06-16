@@ -11,6 +11,15 @@ import HandsonPanel from './components/HandsonPanel'
 
 type Token = { id: number; piece: string }
 
+type ToolEvent = {
+  id: string
+  name: 'web_search' | 'open_url'
+  phase: 'start' | 'result'
+  query?: string
+  url?: string
+  summary?: string
+}
+
 type Message = {
   role: 'user' | 'assistant'
   content: string
@@ -21,6 +30,20 @@ type Message = {
   showThinking?: boolean
   tokens?: Token[]
   showTokens?: boolean
+  toolEvents?: ToolEvent[]
+  showTools?: boolean
+}
+
+type ChatStreamPayload = {
+  choices?: { delta?: { content?: string } }[]
+  error?: string
+  tool_event?: {
+    phase: 'start' | 'result'
+    id: string
+    name: 'web_search' | 'open_url'
+    args?: { query?: string; url?: string }
+    summary?: string
+  }
 }
 
 const TOKEN_COLORS = [
@@ -40,6 +63,8 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelMounted, setPanelMounted] = useState(false)
   const [thinking, setThinking] = useState(false)
+  // Web検索（tool calling）はハンズオン5ページ目を開いているときだけ有効
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -105,9 +130,11 @@ export default function Home() {
     if (!text || loading) return
 
     setError(null)
+    // Web検索が有効なページ（5ページ目）では推論モードより検索を優先する
+    const useThinking = thinking && !webSearchEnabled
     const userMessage: Message = { role: 'user', content: text }
     const history = [...messages, userMessage]
-    setMessages([...history, { role: 'assistant', content: '', thinkingEnabled: thinking }])
+    setMessages([...history, { role: 'assistant', content: '', thinkingEnabled: useThinking }])
     setInput('')
     setLoading(true)
 
@@ -116,7 +143,7 @@ export default function Home() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, thinking }),
+        body: JSON.stringify({ messages: history, thinking: useThinking, webSearch: webSearchEnabled }),
         signal: abortControllerRef.current.signal,
       })
 
@@ -143,8 +170,45 @@ export default function Home() {
           if (!line.startsWith('data: ')) continue
           const payload = line.slice(6)
           if (payload === '[DONE]') continue
+
+          let parsed: ChatStreamPayload
           try {
-            const parsed = JSON.parse(payload)
+            parsed = JSON.parse(payload)
+          } catch {
+            continue // 不正なJSONは無視
+          }
+
+          // サーバ側エラーは外側の catch へ
+          if (parsed.error) throw new Error(parsed.error)
+
+          // ツール実行イベント（Web検索・ページ取得）
+          if (parsed.tool_event) {
+            const ev = parsed.tool_event
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              const events = last.toolEvents ? [...last.toolEvents] : []
+              if (ev.phase === 'start') {
+                events.push({
+                  id: ev.id,
+                  name: ev.name,
+                  phase: 'start',
+                  query: ev.args?.query,
+                  url: ev.args?.url,
+                })
+              } else {
+                const idx = events.findIndex((e) => e.id === ev.id)
+                if (idx >= 0) {
+                  events[idx] = { ...events[idx], phase: 'result', summary: ev.summary }
+                } else {
+                  events.push({ id: ev.id, name: ev.name, phase: 'result', summary: ev.summary })
+                }
+              }
+              return [...prev.slice(0, -1), { ...last, toolEvents: events, showTools: true }]
+            })
+            continue
+          }
+
+          {
             const chunk = parsed.choices?.[0]?.delta?.content ?? ''
             if (chunk) {
               setMessages((prev) => {
@@ -178,8 +242,6 @@ export default function Home() {
                 }
               })
             }
-          } catch {
-            // 不正なJSONは無視
           }
         }
       }
@@ -201,6 +263,23 @@ export default function Home() {
       setLoading(false)
       inputRef.current?.focus()
     }
+  }
+
+  function hostOf(url?: string) {
+    if (!url) return 'ページ'
+    try {
+      return new URL(url).hostname
+    } catch {
+      return url
+    }
+  }
+
+  function toolLabel(ev: ToolEvent) {
+    if (ev.name === 'web_search') {
+      const q = ev.query ? `「${ev.query}」` : ''
+      return ev.phase === 'start' ? `${q}を検索中` : `${q}を検索しました`
+    }
+    return ev.phase === 'start' ? `${hostOf(ev.url)} を開いています` : `${hostOf(ev.url)} を読みました`
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -322,6 +401,54 @@ export default function Home() {
                             {msg.thinking}
                           </ReactMarkdown>
                           {!msg.thinkingDone && <span className="animate-pulse">▌</span>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ツール実行（Web検索・ページ取得）表示 */}
+                  {msg.role === 'assistant' && msg.toolEvents && msg.toolEvents.length > 0 && (
+                    <div className="rounded-xl border border-sky-200 dark:border-sky-800 overflow-hidden text-sm">
+                      <button
+                        type="button"
+                        onClick={() => setMessages(prev => prev.map((m, j) =>
+                          j === i ? { ...m, showTools: !m.showTools } : m
+                        ))}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/20 hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-colors"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M2 12h20" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                        {msg.toolEvents.some((e) => e.phase === 'start') ? (
+                          <span className="animate-pulse">Webで調べています...</span>
+                        ) : (
+                          <span>Web検索の経過</span>
+                        )}
+                        <svg
+                          width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                          className={`ml-auto transition-transform ${msg.showTools ? 'rotate-180' : ''}`}
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                      {msg.showTools && (
+                        <div className="px-3 py-2 bg-sky-50/60 dark:bg-sky-900/10 border-t border-sky-200 dark:border-sky-800 space-y-2 max-h-56 overflow-y-auto">
+                          {msg.toolEvents.map((ev, k) => (
+                            <div key={`${ev.id}-${k}`} className="text-xs">
+                              <div className="flex items-center gap-1.5 font-medium text-sky-800 dark:text-sky-300">
+                                <span>{ev.name === 'web_search' ? '🔍' : '📄'}</span>
+                                <span className="break-all">{toolLabel(ev)}</span>
+                                {ev.phase === 'start' && <span className="animate-pulse">…</span>}
+                              </div>
+                              {ev.summary && (
+                                <p className="mt-0.5 pl-5 text-sky-700/80 dark:text-sky-400/70 break-all line-clamp-3">
+                                  {ev.summary}
+                                </p>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -459,6 +586,27 @@ export default function Home() {
                 className="flex-1 resize-none rounded-xl border border-gray-200 dark:border-zinc-600 bg-gray-50 dark:bg-zinc-700 px-4 py-2.5 text-base md:text-sm text-gray-800 dark:text-zinc-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50 max-h-32 overflow-y-auto"
                 style={{ fieldSizing: 'content' } as React.CSSProperties}
               />
+              {/* Web検索の状態インジケータ（ハンズオン5ページ目を開くと自動でON） */}
+              <div
+                role="status"
+                title={
+                  webSearchEnabled
+                    ? 'Web検索 ON：AIが必要に応じてインターネットを調べます（「AIとWeb検索」ページで有効）'
+                    : 'Web検索 OFF：「AIとWeb検索」ページを開くと有効になります'
+                }
+                aria-label={webSearchEnabled ? 'Web検索 ON' : 'Web検索 OFF'}
+                className={`flex-none h-9 flex items-center gap-1 px-2 rounded-xl border select-none transition-colors ${
+                  webSearchEnabled
+                    ? 'border-sky-400 bg-sky-50 text-sky-600 dark:border-sky-500 dark:bg-sky-900/30 dark:text-sky-400'
+                    : 'border-gray-200 dark:border-zinc-600 text-gray-300 dark:text-zinc-600'
+                }`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+                <span className="text-[10px] font-bold leading-none">{webSearchEnabled ? 'ON' : 'OFF'}</span>
+              </div>
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
@@ -482,6 +630,7 @@ export default function Home() {
             setInput(text)
             inputRef.current?.focus()
           }}
+          onWebSearchChange={setWebSearchEnabled}
         />
       </div>
 
