@@ -162,11 +162,18 @@ export async function runOpenUrl(url: string): Promise<string> {
 
   let current = url
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    await assertSafeUrl(current) // リダイレクト先も毎回ガード
+    // 自分で安全なIPに解決し、そのIPに固定して curl を実行する（リダイレクト先も毎回）。
+    // curl 自身に再解決させない＝検証時と取得時で解決結果がずれる DNS リバインディング(TOCTOU)を防ぐ。
+    let target: { host: string; port: string; ip: string }
+    try {
+      target = await resolveSafeTarget(current)
+    } catch (e) {
+      return `ページを開けませんでした（${current}）: ${e instanceof Error ? e.message : String(e)}`
+    }
 
     let result: { status: number; redirectUrl: string; contentType: string; body: string }
     try {
-      result = await curlGet(current)
+      result = await curlGet(current, target)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return `ページを開けませんでした（${current}）: ${msg}`
@@ -197,10 +204,14 @@ export async function runOpenUrl(url: string): Promise<string> {
 }
 
 // curl で1回取得。-L は付けず、リダイレクト先・ステータス・Content-Type をメタ行で受け取る。
+// target で渡した安全IPに --resolve で接続を固定し、curl による独立した（リバインド可能な）名前解決を封じる。
 async function curlGet(
-  url: string
+  url: string,
+  target: { host: string; port: string; ip: string }
 ): Promise<{ status: number; redirectUrl: string; contentType: string; body: string }> {
   const MARKER = '\n___CURLMETA___'
+  // IPv6 は --resolve では角括弧で囲む
+  const pinnedIp = target.ip.includes(':') ? `[${target.ip}]` : target.ip
   let stdout: string
   try {
     const r = await execFileAsync(
@@ -215,6 +226,9 @@ async function curlGet(
         'Accept-Language: ja,en;q=0.8',
         '--proto',
         '=http,https',
+        // host:port への接続を検証済みの安全IPに固定（Host/SNI はホスト名のまま）
+        '--resolve',
+        `${target.host}:${target.port}:${pinnedIp}`,
         '--max-filesize',
         String(MAX_BYTES),
         '-o',
@@ -297,10 +311,14 @@ function safeFromCodePoint(cp: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// SSRF ガード: http/https のみ許可し、内部・ローカルIPへのアクセスを拒否
+// SSRF ガード: http/https のみ許可し、ホスト名を自分で解決して安全なIPだけを返す。
+// 返したIPを curl に --resolve で固定渡しすることで、curl による独立した再解決
+// （検証時と取得時で結果がずれる DNS リバインディング TOCTOU）を防ぐ。
 // ---------------------------------------------------------------------------
 
-export async function assertSafeUrl(rawUrl: string): Promise<void> {
+export async function resolveSafeTarget(
+  rawUrl: string
+): Promise<{ host: string; port: string; ip: string }> {
   let u: URL
   try {
     u = new URL(rawUrl)
@@ -314,18 +332,21 @@ export async function assertSafeUrl(rawUrl: string): Promise<void> {
   if (host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0') {
     throw new Error('ローカルホストへのアクセスは禁止されています。')
   }
+  const port = u.port || (u.protocol === 'https:' ? '443' : '80')
 
+  // ホスト名（IPリテラルを含む）を解決し、内部・ローカルIPを除外して安全なものだけ残す。
+  // ※ IPリテラル（127.0.0.1 / 169.254.169.254 等）も lookup はそのIPを返すのでここで弾ける。
   let addresses: { address: string; family: number }[]
   try {
     addresses = await lookup(host, { all: true })
   } catch {
     throw new Error(`ホスト名を解決できませんでした: ${host}`)
   }
-  for (const { address } of addresses) {
-    if (isPrivateIp(address)) {
-      throw new Error('内部ネットワーク／ローカルアドレスへのアクセスは禁止されています。')
-    }
+  const safe = addresses.find((a) => !isPrivateIp(a.address))
+  if (!safe) {
+    throw new Error('内部ネットワーク／ローカルアドレスへのアクセスは禁止されています。')
   }
+  return { host, port, ip: safe.address }
 }
 
 function isPrivateIp(ip: string): boolean {
