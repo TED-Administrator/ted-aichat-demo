@@ -17,10 +17,10 @@ type Props = {
 type Page = { id: number; title: string; file: string; webSearch?: boolean }
 
 const PAGES: Page[] = [
-  { id: 1, title: 'AIリテラシー', file: '/handson/handson.md' },
+  { id: 1, title: 'AIリテラシー', file: '/handson/handson1.md' },
   { id: 2, title: 'AIの仕組み', file: '/handson/handson2.md' },
   { id: 3, title: 'AIとセキュリティ', file: '/handson/handson3.md' },
-  { id: 4, title: 'AI推論とエージェント', file: '/handson/handson4.md' },
+  { id: 4, title: 'AIの推論とエージェント', file: '/handson/handson4.md' },
   { id: 5, title: 'AIとWeb検索', file: '/handson/handson5.md', webSearch: true },
 ]
 
