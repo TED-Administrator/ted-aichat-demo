@@ -33,10 +33,28 @@ function extractText(node: React.ReactNode): string {
   return ''
 }
 
+const FONT_SIZES = [0.75, 0.875, 1.0, 1.25, 1.5, 1.75]
+const DEFAULT_FONT_SIZE_INDEX = 1
+
 export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearchChange }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [contents, setContents] = useState<Record<number, string>>({})
   const [fetchError, setFetchError] = useState<Record<number, boolean>>({})
+  const [fontSizeIndex, setFontSizeIndex] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_FONT_SIZE_INDEX
+    const saved = localStorage.getItem('handson-font-size-index')
+    if (saved === null) return DEFAULT_FONT_SIZE_INDEX
+    const idx = parseInt(saved, 10)
+    return isNaN(idx) ? DEFAULT_FONT_SIZE_INDEX : Math.max(0, Math.min(idx, FONT_SIZES.length - 1))
+  })
+
+  const changeFontSize = (delta: number) => {
+    setFontSizeIndex((prev) => {
+      const next = Math.max(0, Math.min(prev + delta, FONT_SIZES.length - 1))
+      localStorage.setItem('handson-font-size-index', String(next))
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!isOpen || contents[currentPage] !== undefined) return
@@ -74,6 +92,28 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearch
           <h2 className="text-sm font-semibold text-white">
             ハンズオンテキスト
           </h2>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => changeFontSize(-1)}
+              disabled={fontSizeIndex === 0}
+              aria-label="文字を小さく"
+              title="文字を小さく"
+              className="px-2 py-0.5 text-xs font-bold rounded text-indigo-200 hover:text-white hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors select-none"
+            >
+              A−
+            </button>
+            <button
+              type="button"
+              onClick={() => changeFontSize(1)}
+              disabled={fontSizeIndex === FONT_SIZES.length - 1}
+              aria-label="文字を大きく"
+              title="文字を大きく"
+              className="px-2 py-0.5 text-sm font-bold rounded text-indigo-200 hover:text-white hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors select-none"
+            >
+              A＋
+            </button>
+          </div>
         </div>
         <div className="flex gap-1 overflow-x-auto pb-px">
           {PAGES.map((page) => (
@@ -106,7 +146,7 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearch
           <p className="text-sm text-gray-400 dark:text-zinc-500 animate-pulse">読み込み中...</p>
         )}
         {content && (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className="prose prose-sm dark:prose-invert max-w-none" style={{ fontSize: `${FONT_SIZES[fontSizeIndex]}rem` }}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
               rehypePlugins={[rehypeKatex]}
