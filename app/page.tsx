@@ -75,10 +75,19 @@ export default function Home() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const wasLoadingRef = useRef(false)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // loading が true → false に変わったとき（AI回答完了）に入力欄へフォーカス
+  useEffect(() => {
+    if (wasLoadingRef.current && !loading) {
+      inputRef.current?.focus()
+    }
+    wasLoadingRef.current = loading
+  }, [loading])
 
   useEffect(() => {
     setPanelOpen(localStorage.getItem('handson-panel-open') === 'true')
@@ -300,7 +309,6 @@ export default function Home() {
       setMessages((prev) => prev.slice(0, -1))
     } finally {
       setLoading(false)
-      inputRef.current?.focus()
     }
   }
 
