@@ -1,9 +1,14 @@
 import { NextRequest } from 'next/server'
 
-const LLAMA_URL = process.env.LLAMA_API_URL ?? 'http://localhost:8080'
+const LLAMA_URLS: Record<number, string> = {
+  1: process.env.LLAMA_API_URL ?? 'http://localhost:8080',
+  2: process.env.LLAMA_API_URL_2 ?? 'http://localhost:8081',
+}
 
 export async function POST(request: NextRequest) {
-  const { content } = await request.json()
+  const { content, modelIndex } = await request.json()
+  const n = modelIndex === 2 ? 2 : 1
+  const LLAMA_URL = LLAMA_URLS[n]
 
   try {
     const res = await fetch(`${LLAMA_URL}/tokenize`, {

@@ -1,6 +1,18 @@
-const LLAMA_URL = process.env.LLAMA_API_URL ?? 'http://localhost:8080'
+import { NextRequest } from 'next/server'
 
-export async function GET() {
+const LLAMA_URLS: Record<number, string> = {
+  1: process.env.LLAMA_API_URL ?? 'http://localhost:8080',
+  2: process.env.LLAMA_API_URL_2 ?? 'http://localhost:8081',
+}
+
+const LLAMA_LABELS: Record<number, string | undefined> = {
+  1: process.env.LLAMA_MODEL_LABEL_1,
+  2: process.env.LLAMA_MODEL_LABEL_2,
+}
+
+export async function GET(request: NextRequest) {
+  const n = Math.max(1, Math.min(2, Number(request.nextUrl.searchParams.get('n') ?? '1')))
+  const LLAMA_URL = LLAMA_URLS[n] ?? LLAMA_URLS[1]
   try {
     const [modelsRes, slotsRes] = await Promise.all([
       fetch(`${LLAMA_URL}/v1/models`, { cache: 'no-store' }),
@@ -21,8 +33,9 @@ export async function GET() {
       if (Array.isArray(slots)) parallel = slots.length
     }
 
-    return Response.json({ model, ctxSize, parallel })
+    const label = LLAMA_LABELS[n] ?? null
+    return Response.json({ model, ctxSize, parallel, label })
   } catch {
-    return Response.json({ model: null, ctxSize: null, parallel: null })
+    return Response.json({ model: null, ctxSize: null, parallel: null, label: LLAMA_LABELS[n] ?? null })
   }
 }

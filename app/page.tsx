@@ -9,6 +9,8 @@ import rehypeKatex from 'rehype-katex'
 import Link from 'next/link'
 import HandsonPanel from './components/HandsonPanel'
 
+type ModelInfo = { model: string | null; label: string | null; online: boolean }
+
 type Token = { id: number; piece: string }
 
 type ToolEvent = {
@@ -65,6 +67,11 @@ export default function Home() {
   const [thinking, setThinking] = useState(false)
   // Web検索（tool calling）はハンズオン5ページ目を開いているときだけ有効
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<1 | 2>(1)
+  const [modelInfos, setModelInfos] = useState<Record<1 | 2, ModelInfo>>({
+    1: { model: null, label: null, online: false },
+    2: { model: null, label: null, online: false },
+  })
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -76,8 +83,40 @@ export default function Home() {
   useEffect(() => {
     setPanelOpen(localStorage.getItem('handson-panel-open') === 'true')
     setThinking(localStorage.getItem('thinking-mode') === 'true')
+    const saved = localStorage.getItem('selected-model')
+    if (saved === '2') setSelectedModel(2)
     setPanelMounted(true)
+
+    async function fetchModelInfo(n: 1 | 2) {
+      try {
+        const res = await fetch(`/api/model-info?n=${n}`)
+        const data = await res.json()
+        setModelInfos((prev) => ({
+          ...prev,
+          [n]: { model: data.model, label: data.label ?? null, online: data.model !== null },
+        }))
+      } catch {
+        // オフラインのままにする
+      }
+    }
+    fetchModelInfo(1)
+    fetchModelInfo(2)
   }, [])
+
+  function switchModel(n: 1 | 2) {
+    setSelectedModel(n)
+    localStorage.setItem('selected-model', String(n))
+    setMessages([])
+    setError(null)
+  }
+
+  function shortModelName(info: ModelInfo, n: 1 | 2): string {
+    if (info.label) return info.label
+    if (!info.model) return `モデル ${n}`
+    const base = info.model.replace(/\.gguf$/i, '').replace(/[_]/g, '-')
+    const parts = base.split('-')
+    return parts.slice(0, 3).join('-')
+  }
 
   function togglePanel() {
     setPanelOpen((prev) => {
@@ -104,7 +143,7 @@ export default function Home() {
       const res = await fetch('/api/tokenize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, modelIndex: selectedModel }),
       })
       const data = await res.json()
       if (data.tokens) {
@@ -143,7 +182,7 @@ export default function Home() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, thinking: useThinking, webSearch: webSearchEnabled }),
+        body: JSON.stringify({ messages: history, thinking: useThinking, webSearch: webSearchEnabled, modelIndex: selectedModel }),
         signal: abortControllerRef.current.signal,
       })
 
@@ -307,6 +346,29 @@ export default function Home() {
             Powered by llama.cpp + Gemma
           </p>
         </div>
+        {/* モデル切替 */}
+        <div className="flex items-center gap-1 rounded-xl border border-gray-200 dark:border-zinc-600 p-0.5">
+          {([1, 2] as const).map((n) => (
+            <button
+              key={n}
+              onClick={() => switchModel(n)}
+              title={modelInfos[n].model ?? `ポート ${n === 1 ? 8080 : 8081}`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                selectedModel === n
+                  ? 'bg-indigo-500 text-white'
+                  : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-700'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full flex-none ${
+                  modelInfos[n].online ? 'bg-green-400' : 'bg-gray-300 dark:bg-zinc-600'
+                }`}
+              />
+              {shortModelName(modelInfos[n], n)}
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center gap-2">
           {/* 受講者向けURL共有ページへのリンク */}
           <Link
