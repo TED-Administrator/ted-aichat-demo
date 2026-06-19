@@ -9,7 +9,7 @@ import rehypeKatex from 'rehype-katex'
 import Link from 'next/link'
 import HandsonPanel from './components/HandsonPanel'
 
-type ModelInfo = { model: string | null; label: string | null; online: boolean }
+type ModelInfo = { model: string | null; label: string | null; online: boolean; ctxSize: number | null }
 
 type Token = { id: number; piece: string }
 
@@ -69,9 +69,11 @@ export default function Home() {
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [selectedModel, setSelectedModel] = useState<1 | 2>(1)
   const [modelInfos, setModelInfos] = useState<Record<1 | 2, ModelInfo>>({
-    1: { model: null, label: null, online: false },
-    2: { model: null, label: null, online: false },
+    1: { model: null, label: null, online: false, ctxSize: null },
+    2: { model: null, label: null, online: false, ctxSize: null },
   })
+  const [usedTokens, setUsedTokens] = useState(0)
+  const tokenizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -89,6 +91,27 @@ export default function Home() {
     wasLoadingRef.current = loading
   }, [loading])
 
+  // メッセージ更新後（ローディング完了時）にコンテキスト使用トークン数を計算
+  useEffect(() => {
+    if (loading) return
+    if (tokenizeTimerRef.current) clearTimeout(tokenizeTimerRef.current)
+    if (messages.length === 0) { setUsedTokens(0); return }
+    tokenizeTimerRef.current = setTimeout(async () => {
+      const allContent = messages.map((m) => m.content).join('\n\n')
+      if (!allContent.trim()) { setUsedTokens(0); return }
+      try {
+        const res = await fetch('/api/tokenize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: allContent, modelIndex: selectedModel }),
+        })
+        const data = await res.json()
+        if (data.tokens) setUsedTokens(data.tokens.length)
+      } catch { /* ignore */ }
+    }, 500)
+    return () => { if (tokenizeTimerRef.current) clearTimeout(tokenizeTimerRef.current) }
+  }, [messages, loading, selectedModel])
+
   useEffect(() => {
     setPanelOpen(localStorage.getItem('handson-panel-open') === 'true')
     setThinking(localStorage.getItem('thinking-mode') === 'true')
@@ -102,7 +125,7 @@ export default function Home() {
         const data = await res.json()
         setModelInfos((prev) => ({
           ...prev,
-          [n]: { model: data.model, label: data.label ?? null, online: data.model !== null },
+          [n]: { model: data.model, label: data.label ?? null, online: data.model !== null, ctxSize: data.ctxSize ?? null },
         }))
       } catch {
         // オフラインのままにする
@@ -169,6 +192,7 @@ export default function Home() {
     setInput('')
     setError(null)
     setLoading(false)
+    setUsedTokens(0)
     inputRef.current?.focus()
   }
 
@@ -610,8 +634,30 @@ export default function Home() {
 
           <form
             onSubmit={handleSubmit}
-            className="flex-none bg-white dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700 p-3"
+            className="flex-none bg-white dark:bg-zinc-800 border-t border-gray-200 dark:border-zinc-700 px-3 pt-2 pb-3"
           >
+            {/* コンテキストウィンドウ使用量 */}
+            {(() => {
+              const ctxSize = modelInfos[selectedModel].ctxSize
+              if (!ctxSize) return null
+              const pct = Math.min((usedTokens / ctxSize) * 100, 100)
+              return (
+                <div className="mb-2 flex items-center gap-2 text-xs text-gray-400 dark:text-zinc-500">
+                  <span className="flex-none">コンテキスト</span>
+                  <div className="flex-1 h-1.5 bg-gray-100 dark:bg-zinc-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        pct > 90 ? 'bg-red-400' : pct > 70 ? 'bg-amber-400' : 'bg-indigo-300 dark:bg-indigo-500'
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="flex-none tabular-nums">
+                    {usedTokens.toLocaleString()} / {ctxSize.toLocaleString()}
+                  </span>
+                </div>
+              )
+            })()}
             <div className="flex items-end gap-2">
               <button
                 type="button"
