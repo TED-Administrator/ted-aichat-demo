@@ -7,8 +7,11 @@ services:
     ports:
       - "8888:3000"
     environment:
-      LLAMA_API_URL: ${LLAMA_API_URL:-http://host.docker.internal:8080}
-      LLAMA_MODEL:   ${LLAMA_MODEL:-gemma4}
+      LLAMA_API_URL:         ${LLAMA_API_URL:-http://host.docker.internal:8080}
+      LLAMA_API_URL_2:       ${LLAMA_API_URL_2:-http://host.docker.internal:8081}
+      LLAMA_MODEL:           ${LLAMA_MODEL:-gemma4}
+      LLAMA_MODEL_LABEL_1:   ${LLAMA_MODEL_LABEL_1:-}
+      LLAMA_MODEL_LABEL_2:   ${LLAMA_MODEL_LABEL_2:-}
     networks:
       - aichat-net
     restart: unless-stopped

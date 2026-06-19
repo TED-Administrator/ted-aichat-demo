@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server'
 import { TOOLS } from '@/lib/tools'
 import { executeTool } from '@/lib/execute-tool'
 
-const LLAMA_URL = process.env.LLAMA_API_URL ?? 'http://localhost:8080'
+const LLAMA_URLS: Record<number, string> = {
+  1: process.env.LLAMA_API_URL ?? 'http://localhost:8080',
+  2: process.env.LLAMA_API_URL_2 ?? 'http://localhost:8081',
+}
 const MODEL = process.env.LLAMA_MODEL ?? 'gemma4'
 const MAX_ITERATIONS = Number(process.env.TOOL_MAX_ITERATIONS ?? 5)
 
@@ -11,7 +14,9 @@ const TOOL_SYSTEM_PROMPT =
   'あなたはインターネット検索ツールを使えるAIアシスタントです。最新の出来事・時事・ニュース・価格・天気・統計など、あなたの学習データに無い、または古くなっている可能性がある情報を尋ねられたら、まず web_search でキーワード検索し、有望な結果を open_url で開いて内容を確認してから回答してください。ユーザーがURLを示した場合は open_url でそのページを読みます。回答の最後に、参照したページのタイトルとURLを必ず示してください。あいさつや一般常識など、あなたの知識で確実に答えられることにはツールを使わないでください。'
 
 export async function POST(request: NextRequest) {
-  const { messages, thinking, webSearch } = await request.json()
+  const { messages, thinking, webSearch, modelIndex } = await request.json()
+  const n = modelIndex === 2 ? 2 : 1
+  const LLAMA_URL = LLAMA_URLS[n]
 
   // Web検索（tool calling）が無効な場合は従来どおりの単純プロキシ（ツールなし）。
   // ハンズオン5ページ目以外（1〜4ページ目）や通常チャットはこちらを通る。
@@ -68,7 +73,7 @@ export async function POST(request: NextRequest) {
         const seen = new Set<string>()
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
-          const { content, toolCalls } = await streamRound(convo, true, send)
+          const { content, toolCalls } = await streamRound(convo, true, send, LLAMA_URL)
 
           // ツール不要 → 最終回答は既にクライアントへストリーム済み
           if (toolCalls.length === 0) {
@@ -108,7 +113,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 反復上限に到達 → ツールなしで最終回答を強制（必ず終了する）
-        const { content } = await streamRound(convo, false, send)
+        const { content } = await streamRound(convo, false, send, LLAMA_URL)
         if (!content.trim()) {
           send({ choices: [{ delta: { content: '（情報を十分に取得できませんでした。質問を変えてお試しください。）' } }] })
         }
@@ -152,7 +157,8 @@ type ChatMessage = {
 async function streamRound(
   convo: ChatMessage[],
   withTools: boolean,
-  send: (obj: unknown) => void
+  send: (obj: unknown) => void,
+  llamaUrl: string
 ): Promise<{ content: string; toolCalls: ToolCall[] }> {
   const body: Record<string, unknown> = { model: MODEL, messages: convo, stream: true }
   if (withTools) {
@@ -162,7 +168,7 @@ async function streamRound(
 
   let upstream: Response
   try {
-    upstream = await fetch(`${LLAMA_URL}/v1/chat/completions`, {
+    upstream = await fetch(`${llamaUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
