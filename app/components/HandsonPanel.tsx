@@ -12,6 +12,7 @@ type Props = {
   onUsePrompt: (text: string) => void
   onClose: () => void
   onWebSearchChange?: (enabled: boolean) => void
+  onPageChange?: (pageId: number) => void
 }
 
 type Page = { id: number; title: string; file: string; webSearch?: boolean }
@@ -36,7 +37,7 @@ function extractText(node: React.ReactNode): string {
 const FONT_SIZES = [0.75, 0.875, 1.0, 1.25, 1.5, 1.75]
 const DEFAULT_FONT_SIZE_INDEX = 1
 
-export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearchChange }: Props) {
+export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearchChange, onPageChange }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [contents, setContents] = useState<Record<number, string>>({})
   const [fetchError, setFetchError] = useState<Record<number, boolean>>({})
@@ -123,6 +124,7 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearch
               onClick={() => {
                 setCurrentPage(page.id)
                 onWebSearchChange?.(page.webSearch === true)
+                onPageChange?.(page.id)
               }}
               className={`flex-none px-3 py-1.5 text-xs font-medium rounded-t border-b-2 transition-colors ${
                 currentPage === page.id
@@ -151,6 +153,9 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearch
               remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
               rehypePlugins={[rehypeKatex]}
               components={{
+                blockquote({ children }) {
+                  return <blockquote style={{ quotes: 'none' }}>{children}</blockquote>
+                },
                 pre({ children }) {
                   const text = extractText(children).trimEnd()
                   return (
