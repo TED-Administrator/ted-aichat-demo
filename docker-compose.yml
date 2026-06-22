@@ -5,7 +5,7 @@ services:
     build: .
     image: ted-aichat-demo:latest
     ports:
-      - "8888:3000"
+      - "8061:3000"
     environment:
       LLAMA_API_URL:         ${LLAMA_API_URL:-http://host.docker.internal:8080}
       LLAMA_API_URL_2:       ${LLAMA_API_URL_2:-http://host.docker.internal:8081}
