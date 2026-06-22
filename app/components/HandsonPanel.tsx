@@ -70,15 +70,20 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 画面幅・フォントサイズの変化に追従し、タブのフルラベルが入り切らなければ番号表示へ切り替える
+  // 画面幅・フォントサイズの変化に追従し、タブのフルラベルが入り切らなければ番号表示へ切り替える。
+  // タブ領域は overflow-hidden（横スクロールバーを出さない）。溢れる手前で番号化して見切れも防ぐ。
   useEffect(() => {
     const wrap = tabsWrapRef.current
     const measure = measureRef.current
     if (!wrap || !measure) return
-    const update = () => setCompactTabs(measure.scrollWidth > wrap.clientWidth + 1)
+    const update = () => setCompactTabs(measure.scrollWidth > wrap.clientWidth - 2)
     const ro = new ResizeObserver(update)
     ro.observe(wrap)
     ro.observe(measure)
+    // Webフォント読込後は自然幅が変わるため再計測する（読込前の細い幅で誤判定するのを防ぐ）
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      document.fonts.ready.then(update).catch(() => {})
+    }
     return () => ro.disconnect()
   }, [])
 
@@ -178,7 +183,7 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
             タブが入り切らない場合はラベルではなく番号で表示し、空いたスペースに
             フォントサイズ変更アイコンが収まるようにする。 */}
         <div className="relative flex items-center gap-2">
-          <div ref={tabsWrapRef} className="flex-1 min-w-0 overflow-x-auto">
+          <div ref={tabsWrapRef} className="flex-1 min-w-0 overflow-hidden">
             <div className="flex gap-1 pb-px w-max">
               {PAGES.map((page) => {
                 const active = currentPage === page.id
