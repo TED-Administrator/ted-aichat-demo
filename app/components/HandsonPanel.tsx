@@ -106,11 +106,8 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
               title="全画面表示"
               className="p-0.5 rounded text-indigo-200 hover:text-white hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 3 21 3 21 9" />
-                <polyline points="9 21 3 21 3 15" />
-                <line x1="21" y1="3" x2="14" y2="10" />
-                <line x1="3" y1="21" x2="10" y2="14" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <polygon points="16 5 16 19 6 12" />
               </svg>
             </button>
             <h2 className="text-sm font-semibold text-white">
@@ -125,11 +122,8 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
               title="画面半分に戻す"
               className="p-0.5 rounded text-indigo-200 hover:text-white hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="4 14 10 14 10 20" />
-                <polyline points="20 10 14 10 14 4" />
-                <line x1="14" y1="10" x2="21" y2="3" />
-                <line x1="3" y1="21" x2="10" y2="14" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <polygon points="8 5 8 19 18 12" />
               </svg>
             </button>
           </div>
