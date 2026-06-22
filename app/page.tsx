@@ -64,6 +64,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelMounted, setPanelMounted] = useState(false)
+  const [panelFull, setPanelFull] = useState(false)
   const [thinking, setThinking] = useState(false)
   // Web検索（tool calling）はハンズオン5ページ目を開いているときだけ有効
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
@@ -156,8 +157,11 @@ export default function Home() {
 
   function togglePanel() {
     setPanelOpen((prev) => {
-      localStorage.setItem('handson-panel-open', String(!prev))
-      return !prev
+      const next = !prev
+      localStorage.setItem('handson-panel-open', String(next))
+      // 開くときは必ず画面半分の状態で開く
+      if (next) setPanelFull(false)
+      return next
     })
   }
 
@@ -440,7 +444,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {messages.length === 0 && (
@@ -741,8 +745,20 @@ export default function Home() {
           </form>
         </div>
 
+        {/* デスクトップ用スペーサ: パネルを開いている間はチャットを左半分へ収める枠を確保する。
+            全画面時もチャットは左半分のまま動かさず、オーバーレイ表示のパネル(z-20)が上に被さる
+            （切り替え時にチャットが再レイアウトされず、パネルが覆うだけの滑らかな動きになる）。 */}
+        <div
+          aria-hidden
+          className={`hidden md:block flex-none transition-[width] duration-300 ease-in-out ${
+            panelOpen ? 'md:w-1/2' : 'w-0'
+          }`}
+        />
+
         <HandsonPanel
           isOpen={panelOpen}
+          isFull={panelFull}
+          onSetFull={setPanelFull}
           onClose={togglePanel}
           onUsePrompt={(text) => {
             setInput(text)

@@ -9,6 +9,8 @@ import rehypeKatex from 'rehype-katex'
 
 type Props = {
   isOpen: boolean
+  isFull: boolean
+  onSetFull: (full: boolean) => void
   onUsePrompt: (text: string) => void
   onClose: () => void
   onWebSearchChange?: (enabled: boolean) => void
@@ -37,7 +39,7 @@ function extractText(node: React.ReactNode): string {
 const FONT_SIZES = [0.75, 0.875, 1.0, 1.25, 1.5, 1.75]
 const DEFAULT_FONT_SIZE_INDEX = 1
 
-export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearchChange, onPageChange }: Props) {
+export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, onClose, onWebSearchChange, onPageChange }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [contents, setContents] = useState<Record<number, string>>({})
   const [fetchError, setFetchError] = useState<Record<number, boolean>>({})
@@ -86,19 +88,45 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearch
         bg-white dark:bg-zinc-800
         border-t-2 border-indigo-400 dark:border-indigo-600
         md:border-t-0 md:border-l-2 md:border-indigo-300 dark:md:border-indigo-700
-        md:max-h-none md:h-auto md:w-1/2 md:min-w-0
+        md:absolute md:top-0 md:right-0 md:bottom-0 md:w-full md:min-w-0 md:max-h-none md:z-20
         transition-[max-height,max-width] duration-300 ease-in-out
-        ${isOpen
-          ? 'max-h-[50vh] md:max-w-[50%]'
-          : 'max-h-0 md:max-w-0'
-        }
+        ${isOpen ? 'max-h-[50vh]' : 'max-h-0'}
+        ${!isOpen ? 'md:max-w-0' : isFull ? 'md:max-w-full' : 'md:max-w-[50%]'}
       `}
     >
       <div className="flex-none px-5 pt-3 pb-0 border-b border-indigo-700 dark:border-indigo-700 bg-indigo-600 dark:bg-indigo-800 z-10">
         <div className="hidden md:flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-white">
-            ハンズオンテキスト
-          </h2>
+          <div className="flex items-center gap-1.5">
+            {/* 左アイコン: 全画面表示にする */}
+            <button
+              type="button"
+              onClick={() => onSetFull(true)}
+              disabled={isFull}
+              aria-label="テキストを全画面表示"
+              title="全画面表示"
+              className="p-0.5 rounded text-indigo-200 hover:text-white hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <polygon points="16 5 16 19 6 12" />
+              </svg>
+            </button>
+            <h2 className="text-sm font-semibold text-white">
+              ハンズオンテキスト
+            </h2>
+            {/* 右アイコン: 画面半分の表示に戻す */}
+            <button
+              type="button"
+              onClick={() => onSetFull(false)}
+              disabled={!isFull}
+              aria-label="テキストを画面半分に戻す"
+              title="画面半分に戻す"
+              className="p-0.5 rounded text-indigo-200 hover:text-white hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <polygon points="8 5 8 19 18 12" />
+              </svg>
+            </button>
+          </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
