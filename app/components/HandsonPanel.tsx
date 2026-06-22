@@ -57,6 +57,12 @@ export default function HandsonPanel({ isOpen, onUsePrompt, onClose, onWebSearch
     })
   }
 
+  // マウント時に初期ページをページ親へ通知し、モデルを正しく同期する
+  useEffect(() => {
+    onPageChange?.(currentPage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     if (!isOpen || contents[currentPage] !== undefined) return
     const page = PAGES.find((p) => p.id === currentPage)!
