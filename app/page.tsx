@@ -140,6 +140,10 @@ export default function Home() {
     localStorage.setItem('selected-model', String(n))
     setMessages([])
     setError(null)
+    if (n === 2) {
+      setThinking(false)
+      localStorage.setItem('thinking-mode', 'false')
+    }
   }
 
   function shortModelName(info: ModelInfo, n: 1 | 2): string {
@@ -378,17 +382,16 @@ export default function Home() {
             Powered by llama.cpp + Gemma
           </p>
         </div>
-        {/* モデル切替 */}
+        {/* モデル表示（ハンズオンページに応じて自動切替・手動操作不可） */}
         <div className="flex items-center gap-1 rounded-xl border border-gray-200 dark:border-zinc-600 p-0.5">
           {([1, 2] as const).map((n) => (
-            <button
+            <div
               key={n}
-              onClick={() => switchModel(n)}
               title={modelInfos[n].model ?? `ポート ${n === 1 ? 8080 : 8081}`}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
                 selectedModel === n
                   ? 'bg-indigo-500 text-white'
-                  : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                  : 'text-gray-500 dark:text-zinc-400'
               }`}
             >
               <span
@@ -397,7 +400,7 @@ export default function Home() {
                 }`}
               />
               {shortModelName(modelInfos[n], n)}
-            </button>
+            </div>
           ))}
         </div>
 
@@ -556,7 +559,7 @@ export default function Home() {
                         : 'bg-white dark:bg-zinc-800 text-gray-800 dark:text-zinc-100 border border-gray-200 dark:border-zinc-700 rounded-tl-sm prose prose-sm dark:prose-invert max-w-none'
                     }`}
                   >
-                    {msg.content === '' && msg.role === 'assistant' && (!msg.thinkingEnabled || msg.thinkingDone) ? (
+                    {msg.content === '' && msg.role === 'assistant' ? (
                       <span className="flex gap-1 py-0.5">
                         <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
                         <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
@@ -564,9 +567,7 @@ export default function Home() {
                       </span>
                     ) : msg.role === 'assistant' ? (
                       <>
-                        {msg.content === '' && msg.thinkingEnabled && !msg.thinkingDone ? null : (
-                          <>
-                            {msg.showTokens && msg.tokens ? (
+                        {msg.showTokens && msg.tokens ? (
                               <div className="not-prose">
                                 <p className="text-sm leading-loose font-mono break-all">
                                   {msg.tokens.map((t, ti) => (
@@ -612,8 +613,6 @@ export default function Home() {
                                 </button>
                               </div>
                             )}
-                          </>
-                        )}
                       </>
                     ) : (
                       msg.content
@@ -677,10 +676,13 @@ export default function Home() {
               <button
                 type="button"
                 onClick={toggleThinking}
-                title={thinking ? '推論モード ON（クリックでOFF）' : '推論モード OFF（クリックでON）'}
+                disabled={selectedModel === 2}
+                title={selectedModel === 2 ? 'このモデルは推論モード非対応' : thinking ? '推論モード ON（クリックでOFF）' : '推論モード OFF（クリックでON）'}
                 aria-pressed={thinking}
                 className={`flex-none w-9 h-9 flex items-center justify-center rounded-xl border transition-colors ${
-                  thinking
+                  selectedModel === 2
+                    ? 'border-gray-100 dark:border-zinc-700 text-gray-300 dark:text-zinc-700 cursor-not-allowed'
+                    : thinking
                     ? 'border-amber-400 bg-amber-50 text-amber-500 dark:border-amber-500 dark:bg-amber-900/30 dark:text-amber-400'
                     : 'border-gray-200 dark:border-zinc-600 text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
                 }`}
@@ -747,6 +749,10 @@ export default function Home() {
             inputRef.current?.focus()
           }}
           onWebSearchChange={setWebSearchEnabled}
+          onPageChange={(pageId) => {
+            // handson1〜3: gemma-3-4b（model 2）、handson4〜5: gemma-4-12b（model 1）
+            switchModel(pageId <= 3 ? 2 : 1)
+          }}
         />
       </div>
 
