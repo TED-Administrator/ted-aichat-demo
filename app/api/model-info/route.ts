@@ -25,12 +25,14 @@ export async function GET(request: NextRequest) {
     const entry = data.data?.[0]
     const id: string = entry?.id ?? null
     const model = id ? id.replace(/\.gguf$/i, '') : null
-    const ctxSize: number | null = entry?.meta?.n_ctx ?? null
-
+    let ctxSize: number | null = null
     let parallel: number | null = null
     if (slotsRes.ok) {
       const slots = await slotsRes.json()
-      if (Array.isArray(slots)) parallel = slots.length
+      if (Array.isArray(slots)) {
+        parallel = slots.length
+        ctxSize = slots[0]?.n_ctx ?? null
+      }
     }
 
     const label = LLAMA_LABELS[n] ?? null
