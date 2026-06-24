@@ -54,6 +54,7 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
   // タブのフルラベルが表示領域に収まらない場合は、ラベルではなく番号で表示する
   const tabsWrapRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [compactTabs, setCompactTabs] = useState(false)
 
   const changeFontSize = (delta: number) => {
@@ -86,6 +87,10 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
     }
     return () => ro.disconnect()
   }, [])
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [currentPage])
 
   useEffect(() => {
     if (!isOpen || contents[currentPage] !== undefined) return
@@ -227,7 +232,7 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4">
         {hasError && (
           <p className="text-sm text-red-500">
             テキストの読み込みに失敗しました。
