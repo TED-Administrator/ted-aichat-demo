@@ -396,10 +396,35 @@ export default function Home() {
   }
 
   function handleDelete(index: number) {
-    setMessages(prev => {
-      const start = prev[index - 1]?.role === 'user' ? index - 1 : index
-      return [...prev.slice(0, start), ...prev.slice(index + 1)]
-    })
+    setMessages(prev => prev.map((m, j) => {
+      if (j !== index || !m.versions || m.versions.length === 0) return m
+
+      if (m.displayVersionIdx !== undefined) {
+        // 過去バージョンを削除
+        const idx = m.displayVersionIdx
+        const newVersions = [...m.versions.slice(0, idx), ...m.versions.slice(idx + 1)]
+        const newDisplayIdx = newVersions.length === 0
+          ? undefined
+          : idx > 0 ? idx - 1 : 0
+        return {
+          ...m,
+          versions: newVersions.length > 0 ? newVersions : undefined,
+          displayVersionIdx: newDisplayIdx,
+          showTokens: false,
+        }
+      } else {
+        // 最新版（content）を削除 → ひとつ前を最新に昇格
+        const newVersions = m.versions.slice(0, -1)
+        return {
+          ...m,
+          content: m.versions[m.versions.length - 1],
+          versions: newVersions.length > 0 ? newVersions : undefined,
+          displayVersionIdx: undefined,
+          tokens: undefined,
+          showTokens: false,
+        }
+      }
+    }))
   }
 
   function hostOf(url?: string) {
@@ -657,39 +682,21 @@ export default function Home() {
                             )}
                             {!(loading && i === streamingIndex) && msg.content && (
                               <div className="not-prose flex items-center justify-between mt-1 gap-2">
-                                {/* 左グループ: 再生成・削除 */}
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRegenerate(i)}
-                                    disabled={loading}
-                                    title="回答を再生成"
-                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                  >
-                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                      <path d="M3 3v5h5" />
-                                    </svg>
-                                    再生成
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDelete(i)}
-                                    disabled={loading}
-                                    title="このやり取りを削除"
-                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-400 dark:text-zinc-500 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                  >
-                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <polyline points="3 6 5 6 21 6" />
-                                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                      <path d="M10 11v6" />
-                                      <path d="M14 11v6" />
-                                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                                    </svg>
-                                    削除
-                                  </button>
-                                </div>
-                                {/* バージョンナビゲーション */}
+                                {/* 再生成ボタン */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRegenerate(i)}
+                                  disabled={loading}
+                                  title="回答を再生成"
+                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                    <path d="M3 3v5h5" />
+                                  </svg>
+                                  再生成
+                                </button>
+                                {/* バージョンナビゲーション＋削除（複数バージョン時のみ） */}
                                 {msg.versions && msg.versions.length > 0 && (
                                   <div className="flex items-center gap-0.5 text-xs text-gray-400 dark:text-zinc-500 select-none">
                                     <button
@@ -712,6 +719,18 @@ export default function Home() {
                                       className="w-5 h-5 flex items-center justify-center rounded hover:text-gray-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-base leading-none"
                                     >
                                       ›
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDelete(i)}
+                                      disabled={loading}
+                                      title="このバージョンを削除"
+                                      className="w-5 h-5 flex items-center justify-center rounded hover:text-red-500 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                      </svg>
                                     </button>
                                   </div>
                                 )}
