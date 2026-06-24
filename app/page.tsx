@@ -34,6 +34,8 @@ type Message = {
   showTokens?: boolean
   toolEvents?: ToolEvent[]
   showTools?: boolean
+  versions?: string[]
+  displayVersionIdx?: number
 }
 
 type ChatStreamPayload = {
@@ -79,6 +81,7 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const wasLoadingRef = useRef(false)
+  const [streamingIndex, setStreamingIndex] = useState<number | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -204,144 +207,192 @@ export default function Home() {
     inputRef.current?.focus()
   }
 
+  async function streamInto(
+    targetIndex: number,
+    historyMessages: { role: string; content: string }[],
+    useThink: boolean,
+    useWebSearch: boolean,
+    modelIdx: 1 | 2,
+  ) {
+    const update = (updater: (msg: Message) => Message) =>
+      setMessages(prev => {
+        const msg = prev[targetIndex]
+        if (!msg) return prev
+        return [...prev.slice(0, targetIndex), updater(msg), ...prev.slice(targetIndex + 1)]
+      })
+
+    abortControllerRef.current = new AbortController()
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: historyMessages, thinking: useThink, webSearch: useWebSearch, modelIndex: modelIdx }),
+      signal: abortControllerRef.current.signal,
+    })
+
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.error ?? 'エラーが発生しました')
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('ストリームを取得できませんでした')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const payload = line.slice(6)
+        if (payload === '[DONE]') continue
+
+        let parsed: ChatStreamPayload
+        try { parsed = JSON.parse(payload) } catch { continue }
+
+        if (parsed.error) throw new Error(parsed.error)
+
+        if (parsed.tool_event) {
+          const ev = parsed.tool_event
+          update(msg => {
+            const events = msg.toolEvents ? [...msg.toolEvents] : []
+            if (ev.phase === 'start') {
+              events.push({ id: ev.id, name: ev.name, phase: 'start', query: ev.args?.query, url: ev.args?.url })
+            } else {
+              const idx = events.findIndex((e) => e.id === ev.id)
+              if (idx >= 0) events[idx] = { ...events[idx], phase: 'result', summary: ev.summary }
+              else events.push({ id: ev.id, name: ev.name, phase: 'result', summary: ev.summary })
+            }
+            return { ...msg, toolEvents: events, showTools: true }
+          })
+          continue
+        }
+
+        const chunk = parsed.choices?.[0]?.delta?.content ?? ''
+        if (chunk) {
+          update(msg => {
+            if (!msg.thinkingEnabled || msg.thinkingDone) {
+              return { ...msg, content: msg.content + chunk }
+            }
+            const rawAcc = (msg.rawThinking ?? '') + chunk
+            const closeIdx = rawAcc.indexOf('</think>')
+            if (closeIdx !== -1) {
+              const rawThinking = rawAcc.slice(0, closeIdx)
+              const cleanThinking = rawThinking.replace(/^<think>\n?/, '')
+              const afterThink = rawAcc.slice(closeIdx + 8).trimStart()
+              return { ...msg, rawThinking: rawAcc, thinking: cleanThinking, thinkingDone: true, showThinking: true, content: afterThink }
+            }
+            const cleanThinking = rawAcc.replace(/^<think>\n?/, '')
+            return { ...msg, rawThinking: rawAcc, thinking: cleanThinking, thinkingDone: false, content: '' }
+          })
+        }
+      }
+    }
+
+    update(msg => {
+      if (msg.thinkingEnabled && !msg.thinkingDone && msg.rawThinking) {
+        return { ...msg, thinkingDone: true, content: msg.rawThinking.replace(/^<think>\n?/, ''), thinking: undefined }
+      }
+      return msg
+    })
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const text = input.trim()
     if (!text || loading) return
 
     setError(null)
-    // Web検索が有効なページ（5ページ目）では推論モードより検索を優先する
-    const useThinking = thinking && !webSearchEnabled
+    const useThink = thinking && !webSearchEnabled
     const userMessage: Message = { role: 'user', content: text }
     const history = [...messages, userMessage]
-    setMessages([...history, { role: 'assistant', content: '', thinkingEnabled: useThinking }])
+    const targetIndex = history.length
+    setMessages([...history, { role: 'assistant', content: '', thinkingEnabled: useThink }])
     setInput('')
     setLoading(true)
+    setStreamingIndex(targetIndex)
 
     try {
-      abortControllerRef.current = new AbortController()
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, thinking: useThinking, webSearch: webSearchEnabled, modelIndex: selectedModel }),
-        signal: abortControllerRef.current.signal,
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error ?? 'エラーが発生しました')
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('ストリームを取得できませんでした')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const payload = line.slice(6)
-          if (payload === '[DONE]') continue
-
-          let parsed: ChatStreamPayload
-          try {
-            parsed = JSON.parse(payload)
-          } catch {
-            continue // 不正なJSONは無視
-          }
-
-          // サーバ側エラーは外側の catch へ
-          if (parsed.error) throw new Error(parsed.error)
-
-          // ツール実行イベント（Web検索・ページ取得）
-          if (parsed.tool_event) {
-            const ev = parsed.tool_event
-            setMessages((prev) => {
-              const last = prev[prev.length - 1]
-              const events = last.toolEvents ? [...last.toolEvents] : []
-              if (ev.phase === 'start') {
-                events.push({
-                  id: ev.id,
-                  name: ev.name,
-                  phase: 'start',
-                  query: ev.args?.query,
-                  url: ev.args?.url,
-                })
-              } else {
-                const idx = events.findIndex((e) => e.id === ev.id)
-                if (idx >= 0) {
-                  events[idx] = { ...events[idx], phase: 'result', summary: ev.summary }
-                } else {
-                  events.push({ id: ev.id, name: ev.name, phase: 'result', summary: ev.summary })
-                }
-              }
-              return [...prev.slice(0, -1), { ...last, toolEvents: events, showTools: true }]
-            })
-            continue
-          }
-
-          {
-            const chunk = parsed.choices?.[0]?.delta?.content ?? ''
-            if (chunk) {
-              setMessages((prev) => {
-                const last = prev[prev.length - 1]
-                if (!last.thinkingEnabled || last.thinkingDone) {
-                  return [...prev.slice(0, -1), { ...last, content: last.content + chunk }]
-                }
-                const rawAcc = (last.rawThinking ?? '') + chunk
-                const closeIdx = rawAcc.indexOf('</think>')
-                if (closeIdx !== -1) {
-                  const rawThinking = rawAcc.slice(0, closeIdx)
-                  const cleanThinking = rawThinking.replace(/^<think>\n?/, '')
-                  const afterThink = rawAcc.slice(closeIdx + 8).trimStart()
-                  return [...prev.slice(0, -1), {
-                    ...last,
-                    rawThinking: rawAcc,
-                    thinking: cleanThinking,
-                    thinkingDone: true,
-                    showThinking: true,
-                    content: afterThink,
-                  }]
-                } else {
-                  const cleanThinking = rawAcc.replace(/^<think>\n?/, '')
-                  return [...prev.slice(0, -1), {
-                    ...last,
-                    rawThinking: rawAcc,
-                    thinking: cleanThinking,
-                    thinkingDone: false,
-                    content: '',
-                  }]
-                }
-              })
-            }
-          }
-        }
-      }
-
-      // 推論モードで </think> が来なかった場合のフォールバック
-      setMessages(prev => {
-        const last = prev[prev.length - 1]
-        if (last?.role === 'assistant' && last.thinkingEnabled && !last.thinkingDone && last.rawThinking) {
-          const content = last.rawThinking.replace(/^<think>\n?/, '')
-          return [...prev.slice(0, -1), { ...last, thinkingDone: true, content, thinking: undefined }]
-        }
-        return prev
-      })
+      await streamInto(
+        targetIndex,
+        history.map(m => ({ role: m.role, content: m.content })),
+        useThink,
+        webSearchEnabled,
+        selectedModel,
+      )
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : 'エラーが発生しました')
-      setMessages((prev) => prev.slice(0, -1))
+      setMessages(prev => prev.slice(0, -1))
     } finally {
       setLoading(false)
+      setStreamingIndex(null)
     }
+  }
+
+  async function handleRegenerate(index: number) {
+    if (loading) return
+    const msg = messages[index]
+    if (msg.role !== 'assistant') return
+
+    setError(null)
+    const useThink = thinking && !webSearchEnabled
+    const prevVersions = [...(msg.versions ?? []), msg.content]
+
+    setMessages(prev => prev.map((m, j) =>
+      j !== index ? m : {
+        ...m,
+        content: '',
+        thinkingEnabled: useThink,
+        thinkingDone: undefined,
+        rawThinking: undefined,
+        thinking: undefined,
+        showThinking: undefined,
+        tokens: undefined,
+        showTokens: undefined,
+        toolEvents: undefined,
+        showTools: undefined,
+        versions: prevVersions,
+        displayVersionIdx: undefined,
+      }
+    ))
+    setLoading(true)
+    setStreamingIndex(index)
+
+    try {
+      await streamInto(
+        index,
+        messages.slice(0, index).map(m => ({ role: m.role, content: m.content })),
+        useThink,
+        webSearchEnabled,
+        selectedModel,
+      )
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return
+      setError(err instanceof Error ? err.message : 'エラーが発生しました')
+      setMessages(prev => prev.map((m, j) =>
+        j !== index ? m : { ...m, content: prevVersions[prevVersions.length - 1], versions: msg.versions, displayVersionIdx: undefined }
+      ))
+    } finally {
+      setLoading(false)
+      setStreamingIndex(null)
+    }
+  }
+
+  function handleVersionNav(index: number, delta: number) {
+    setMessages(prev => prev.map((m, j) => {
+      if (j !== index || !m.versions) return m
+      const total = m.versions.length + 1
+      const current = m.displayVersionIdx ?? (total - 1)
+      const next = Math.max(0, Math.min(total - 1, current + delta))
+      return { ...m, displayVersionIdx: next === total - 1 ? undefined : next, showTokens: false }
+    }))
   }
 
   function hostOf(url?: string) {
@@ -454,7 +505,11 @@ export default function Home() {
                 </p>
               </div>
             )}
-            {messages.map((msg, i) => (
+            {messages.map((msg, i) => {
+              const displayedContent = msg.displayVersionIdx !== undefined && msg.versions
+                ? msg.versions[msg.displayVersionIdx]
+                : msg.content
+              return (
               <div
                 key={i}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -590,19 +645,60 @@ export default function Home() {
                                 remarkPlugins={[remarkGfm, remarkMath, remarkCjkFriendly]}
                                 rehypePlugins={[rehypeKatex]}
                               >
-                                {msg.content}
+                                {displayedContent}
                               </ReactMarkdown>
                             )}
-                            {!(loading && i === messages.length - 1) && msg.content && (
-                              <div className="not-prose flex justify-end mt-1">
+                            {!(loading && i === streamingIndex) && msg.content && (
+                              <div className="not-prose flex items-center justify-between mt-1 gap-2">
+                                {/* 再生成ボタン */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRegenerate(i)}
+                                  title="回答を再生成"
+                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                    <path d="M3 3v5h5" />
+                                  </svg>
+                                  再生成
+                                </button>
+                                {/* バージョンナビゲーション */}
+                                {msg.versions && msg.versions.length > 0 && (
+                                  <div className="flex items-center gap-0.5 text-xs text-gray-400 dark:text-zinc-500 select-none">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVersionNav(i, -1)}
+                                      disabled={msg.displayVersionIdx === 0}
+                                      title="前のバージョン"
+                                      className="w-5 h-5 flex items-center justify-center rounded hover:text-gray-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-base leading-none"
+                                    >
+                                      ‹
+                                    </button>
+                                    <span className="tabular-nums px-0.5">
+                                      {(msg.displayVersionIdx ?? msg.versions.length) + 1} / {msg.versions.length + 1}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVersionNav(i, 1)}
+                                      disabled={msg.displayVersionIdx === undefined}
+                                      title="次のバージョン"
+                                      className="w-5 h-5 flex items-center justify-center rounded hover:text-gray-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-base leading-none"
+                                    >
+                                      ›
+                                    </button>
+                                  </div>
+                                )}
+                                {/* トークンボタン */}
                                 <button
                                   type="button"
                                   onClick={() => handleTokenToggle(i, msg.content, !!msg.tokens)}
+                                  disabled={msg.displayVersionIdx !== undefined}
                                   title={msg.showTokens ? 'マークダウン表示に戻す' : 'トークン単位で表示'}
                                   className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors ${
                                     msg.showTokens
                                       ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400'
-                                      : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'
+                                      : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed'
                                   }`}
                                 >
                                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -624,7 +720,8 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            ))}
+              )
+            })}
             {error && (
               <div className="flex justify-center">
                 <p className="text-red-500 text-sm bg-red-50 dark:bg-red-900/20 px-4 py-2 rounded-lg">
