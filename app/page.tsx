@@ -395,6 +395,13 @@ export default function Home() {
     }))
   }
 
+  function handleDelete(index: number) {
+    setMessages(prev => {
+      const start = prev[index - 1]?.role === 'user' ? index - 1 : index
+      return [...prev.slice(0, start), ...prev.slice(index + 1)]
+    })
+  }
+
   function hostOf(url?: string) {
     if (!url) return 'ページ'
     try {
@@ -650,19 +657,38 @@ export default function Home() {
                             )}
                             {!(loading && i === streamingIndex) && msg.content && (
                               <div className="not-prose flex items-center justify-between mt-1 gap-2">
-                                {/* 再生成ボタン */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRegenerate(i)}
-                                  title="回答を再生成"
-                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                    <path d="M3 3v5h5" />
-                                  </svg>
-                                  再生成
-                                </button>
+                                {/* 左グループ: 再生成・削除 */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRegenerate(i)}
+                                    disabled={loading}
+                                    title="回答を再生成"
+                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                      <path d="M3 3v5h5" />
+                                    </svg>
+                                    再生成
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(i)}
+                                    disabled={loading}
+                                    title="このやり取りを削除"
+                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-400 dark:text-zinc-500 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                      <path d="M10 11v6" />
+                                      <path d="M14 11v6" />
+                                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                    </svg>
+                                    削除
+                                  </button>
+                                </div>
                                 {/* バージョンナビゲーション */}
                                 {msg.versions && msg.versions.length > 0 && (
                                   <div className="flex items-center gap-0.5 text-xs text-gray-400 dark:text-zinc-500 select-none">
