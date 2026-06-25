@@ -71,11 +71,12 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // パネルが開いた瞬間に現在ページのWeb検索状態を親へ反映する
-  // （フリーチャット中にWeb検索を手動でONにしていた場合に、パネルのページ状態で上書きする）
+  // パネルが開いた瞬間に現在ページのモデルとWeb検索状態を親へ反映する
+  // （フリーチャット中に手動変更した設定をパネルのページ状態で上書きする）
   useEffect(() => {
     if (!isOpen) return
     const page = PAGES.find((p) => p.id === currentPage)
+    onPageChange?.(currentPage)
     onWebSearchChange?.(page?.webSearch === true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
