@@ -1,5 +1,5 @@
 FROM node:24-alpine AS base
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat curl
 
 # ── Stage 1: install dependencies ──────────────────────────────────────────
 FROM base AS deps
