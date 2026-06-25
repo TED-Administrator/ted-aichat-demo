@@ -71,6 +71,15 @@ export default function HandsonPanel({ isOpen, isFull, onSetFull, onUsePrompt, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // パネルが開いた瞬間に現在ページのWeb検索状態を親へ反映する
+  // （フリーチャット中にWeb検索を手動でONにしていた場合に、パネルのページ状態で上書きする）
+  useEffect(() => {
+    if (!isOpen) return
+    const page = PAGES.find((p) => p.id === currentPage)
+    onWebSearchChange?.(page?.webSearch === true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
+
   // 画面幅・フォントサイズの変化に追従し、タブのフルラベルが入り切らなければ番号表示へ切り替える。
   // タブ領域は overflow-hidden（横スクロールバーを出さない）。溢れる手前で番号化して見切れも防ぐ。
   useEffect(() => {
